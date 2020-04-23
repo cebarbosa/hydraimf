@@ -18,12 +18,12 @@ import extinction
 
 import context
 
-def main(targetSN=80):
-    wdir = os.path.join(context.get_data_dir("MUSE-DEEP"), "fieldA",
-                        "spec1d_FWHM2.95_sn{}".format(targetSN))
+def main(targetSN=250):
+    wdir = os.path.join(context.get_data_dir("MUSE"), "fieldA",
+                        "sn{}/spec1d_FWHM2.95".format(targetSN))
     os.chdir(wdir)
-    outdir = os.path.join(context.get_data_dir("MUSE-DEEP"), "fieldA",
-                          "sci_sn{}".format(targetSN))
+    outdir = os.path.join(context.get_data_dir("MUSE"), "fieldA",
+                          "sn{}/sci".format(targetSN))
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     filenames = sorted([_ for _ in os.listdir(wdir) if _.endswith(".fits")])
