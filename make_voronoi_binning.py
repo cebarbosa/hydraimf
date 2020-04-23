@@ -37,7 +37,7 @@ def collapse_cube(cubename, outfile, redo=False, wmin=5590, wmax=5680):
         Name of the output file
 
     redo : bool (optional)
-        Redo calculations in case the oufile exists.
+        Redo calculations in case the outfile exists.
     """
     if os.path.exists(outfile) and not redo:
         return
@@ -93,7 +93,7 @@ def calc_binning(signal, noise, mask, targetSN, output=None, redo=False):
         Name of the output ascii table.
     """
     if output is None:
-        output = "voronoi_table_sn{}.txt".format(targetSN)
+        output = "./sn{0}/voronoi_table_sn{0}.txt".format(targetSN)
     if os.path.exists(output) and not redo:
         return output
     # Preparing position arrays
@@ -135,7 +135,7 @@ def calc_binning(signal, noise, mask, targetSN, output=None, redo=False):
         try:
             binNum, xNode, yNode, xBar, yBar, sn, nPixels, \
             scale = voronoi_2d_binning(x, y, s, n, targetSN, plot=0,
-                                       quiet=0, pixelsize=1, cvt=False)
+                                       quiet=0, pixelsize=1, cvt=True)
             binNum += 1
         except ValueError:
             binNum = np.ones_like(x)
@@ -175,7 +175,7 @@ def make_voronoi_image(bintable, img, targetSN, redo=False, output=None):
         Name of the output image containing the Voronoi tesselation in 2D.
     """
     if output is None:
-        output = "voronoi2d_sn{}.fits".format(targetSN)
+        output = "./sn{0}/voronoi2d_sn{0}.fits".format(targetSN)
     if os.path.exists(output) and not redo:
         return output
     tabledata = ascii.read(bintable)
@@ -222,7 +222,7 @@ def combine_spectra(cubename, voronoi2D, targetSN, field, redo=False):
         Redo combination in case the output spec already exists.
 
     """
-    outdir = os.path.join(os.getcwd(), "spec1d_sn{}".format(targetSN))
+    outdir = os.path.join(os.getcwd(), "sn{}/spec1d".format(targetSN))
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     data = fits.getdata(cubename, 1)
@@ -247,8 +247,8 @@ def combine_spectra(cubename, voronoi2D, targetSN, field, redo=False):
 
 if __name__ == '__main__':
     fields = ["fieldA"]
-    dataset = "MUSE-DEEP"
-    targetSN = 80
+    dataset = "MUSE"
+    targetSN = 250
     for field in fields:
         imgname, cubename = context.get_field_files(field, dataset=dataset)
         wdir = os.path.split(imgname)[0]
@@ -258,7 +258,10 @@ if __name__ == '__main__':
         signal = fits.getdata(snimg, 1)
         noise = fits.getdata(snimg, 2)
         mask = fits.getdata("simple_binning.fits")
-        bintable = calc_binning(signal, noise, mask, targetSN, redo=True)
-        voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=True)
+        outdir = os.path.join(wdir, "sn{}".format(targetSN))
+        if not os.path.exists(outdir):
+            os.mkdir(outdir)
+        bintable = calc_binning(signal, noise, mask, targetSN, redo=False)
+        voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=False)
         voronoi2D = sort_voronoi2D(voronoi2D, imgname)
-        combine_spectra(cubename, voronoi2D, targetSN, field, redo=True)
+        combine_spectra(cubename, voronoi2D, targetSN, field, redo=False)
