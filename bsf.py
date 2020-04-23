@@ -25,6 +25,7 @@ class LogLike(tt.Op):
     otypes = [tt.dscalar] # outputs a single scalar value (the log likelihood)
 
     def __init__(self, data, x, sigma, stpop, loglike=None):
+        self.loglike = "studt" if loglike is None else loglike
         self.data = data
         self.x = x
         self.sigma = sigma
