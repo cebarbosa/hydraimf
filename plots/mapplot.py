@@ -13,6 +13,7 @@ import os
 
 import numpy as np
 from astropy.io import fits
+from astropy.table import Table, hstack, join
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
@@ -37,7 +38,7 @@ class PlotVoronoiMaps():
             self.cmaps = len(self.columns) * [None]
         self.cb_fmts = cb_fmts
         if self.cb_fmts is None:
-            self.cb_fmts = len(self.columns) * ["%.2f"]
+            self.cb_fmts = len(self.columns) * ["%i"]
         self.targetSN = targetSN
         self.fields = context.fields if fields is None else fields
         self.dataset = dataset
@@ -52,16 +53,16 @@ class PlotVoronoiMaps():
             print(col)
             fig = plt.figure(figsize=figsize)
             gs = gridspec.GridSpec(1,1)
-            gs.update(left=0.13, right=0.98, bottom = 0.1, top=0.98)
+            gs.update(left=0.11, right=0.96, bottom = 0.1, top=0.98)
             ax = plt.subplot(gs[0])
             ax.set_facecolor('1')
             plt.minorticks_on()
             self.make_contours(alpha=0.5)
             kmaps = []
             for i, (field, table) in enumerate(zip(self.fields, self.tables)):
-                binsfile = os.path.join(context.data_dir, self.dataset,
-                                        "combined", field,
-                                    "voronoi2d_sn{}.fits".format(self.targetSN))
+                binsfile = os.path.join(context.get_data_dir(self.dataset),
+                        field, "sn{0}/voronoi2d_sn{0}.fits".format(
+                        self.targetSN))
                 bins = table["BIN"].astype(np.float)
                 vector = table[col].astype(np.float)
                 image = context.get_field_files(field)[0]
@@ -88,7 +89,7 @@ class PlotVoronoiMaps():
             plt.xlim(*xylims[0])
             plt.ylim(*xylims[1])
             plt.xlabel("X (kpc)")
-            plt.ylabel("Y (kpc)")
+            plt.ylabel("Y (kpc)", labelpad=-3.5)
             if arrows:
                 plt.arrow(-5, -20, 5, 0, linewidth=1.5, color="b", head_length=1,
                           head_width=0.5, alpha=1)
@@ -111,27 +112,27 @@ class PlotVoronoiMaps():
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "regular":
                 plt.gca().add_patch(Rectangle((14, -13), 9.5, 18, alpha=1,
-                                              zorder=10,
-                                              color="w"))
+                                              zorder=10, color="w"))
                 self.draw_colorbar(fig, ax, m, orientation="vertical",
                                    cbar_pos=[0.24, 0.365, 0.05, 0.3],
                                    ticks=np.linspace(vmin, vmax, 5),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((-9.5, -12), 7.5, 4.5, alpha=1,
-                                              zorder=10,
-                                              color="w"))
+                plt.gca().add_patch(Rectangle((-9.6, -12), 8, 3.8, alpha=1,
+                                              zorder=10, color="w",
+                                              edgecolor="r", linewidth=1))
                 self.draw_colorbar(fig, ax, m, orientation="horizontal",
-                                   cbar_pos=[0.65, 0.2, 0.3, 0.05],
+                                   cbar_pos=[0.625, 0.2, 0.3, 0.05],
                                    ticks=np.linspace(vmin, vmax, 5),
                                    cblabel=self.labels[j],
-                                   cb_fmt=self.cb_fmts[j], rotation=0,
-                                   ylpos=1.2, xpos=.4)
+                                   cb_fmt=self.cb_fmts[j])
+                ax.text(-4, -9, self.labels[j], zorder=11)
 
-            output = os.path.join(self.outdir, "{}_sn{}.png".format(col,
+            output = os.path.join(self.outdir, "{}_sn{}.pdf".format(col,
                                                                  self.targetSN))
             plt.savefig(output, dpi=250)
+            plt.show()
             plt.clf()
             plt.close()
         return
@@ -157,7 +158,7 @@ class PlotVoronoiMaps():
                        alpha=alpha, origin="bottom")
         if label:
             plt.clabel(cs, contours[0::2], fmt="%d", fontsize=fontsize,
-                       inline_spacing=-3, linewidths=lw)
+                       inline_spacing=-3)
         return
 
     def draw_colorbar(self, fig, ax, coll, ticks=None, cblabel="",
@@ -176,24 +177,33 @@ class PlotVoronoiMaps():
         cbar.ax.xaxis.set_ticks_position('bottom')
         cl = plt.getp(cbar.ax, 'ymajorticklabels')
         plt.setp(cl, fontsize=labelsize+2)
-        ax = cbar.ax
-        ax.text(xpos,ylpos,cblabel,rotation=rotation)
+        # ax.text(xpos,ylpos,cblabel,rotation=rotation)
         return
 
-def test_plot(targetSN=150):
+def test_plot(targetSN=250, dataset="MUSE"):
     """ Produces a test plot using the geometry table. """
     geom = get_geom("fieldA", targetSN)
-    geomtab = os.path.join(context.data_dir, "MUSE/combined/fieldA/geom.fits")
+    geomtab = os.path.join(context.get_data_dir(dataset),
+                           "fieldA/sn{}/geom.fits".format(targetSN))
     geom.write(geomtab, overwrite=True)
-    tables = [geom]
-    outdir = os.path.join(context.home, "plots", "test")
+    wdir = os.path.join(context.get_data_dir(dataset), "fieldA",
+                        "sn{}".format(targetSN))
+    ppxftable = os.path.join(wdir, "ppxf_vel50_w4500_10000_kinematics.fits")
+    ppxf = Table.read(ppxftable)
+    sn_table = Table.read(os.path.join(wdir, "measured_sn.fits"))
+    ppxf = hstack([geom, ppxf])
+    ppxf = join(ppxf, sn_table, keys="spec")
+    print(ppxf.colnames)
+    ppxf.rename_column("SN/Ang", "SNRperAng")
+    outdir = os.path.join(wdir, "plots")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
-    cb_fmts = len(geom.colnames) * ["%i"]
-    pvm = PlotVoronoiMaps(tables, geom.colnames, outdir, targetSN=150, fields=[
-        "fieldA"], cb_fmts=cb_fmts)
-    xylims = [[10, -10], [-12.5, 10]]
+    # cb_fmts = len(geom.colnames) * ["%i"]
+    pvm = PlotVoronoiMaps([ppxf], ["SNRperAng"], outdir,
+                          targetSN=targetSN, fields=["fieldA"],
+                          labels=["SNR (\\r{A}$^{-1}$)"])
+    xylims = [[10, -10], [-13, 10]]
     pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal")
 
 if __name__ == "__main__":
-    test_plot(targetSN=150)
+    test_plot(targetSN=250)
