@@ -77,12 +77,13 @@ class EMiles_models():
                 self.alphaFe = np.array([0., 0.4])
                 self.NaFe = np.array([0., 0.6])
             if sample == "test":
-                self.exponents = np.array([1.3])
-                self.ZH = np.array([-0.96, -0.66, -0.35, -0.25, 0.06,
+                self.exponents = np.array([0.3, 0.8, 1.3, 1.8, 2.3, 2.8,
+                                           3.3, 3.5])
+                self.ZH = np.array([-0.66, -0.35, -0.25, 0.06,
                                      0.15,  0.26,  0.4])
-                self.age = np.linspace(1., 14., 14)
-                self.alphaFe = np.array([0])
-                self.NaFe = np.array([0.])
+                self.age = np.linspace(1., 14., 14)[4:]
+                self.alphaFe = np.array([0., 0.4])
+                self.NaFe = np.array([0., 0.6])
             return
 
     def get_filename(self, imf, metal, age, alpha, na):
@@ -200,14 +201,15 @@ def prepare_templates_emiles_muse(w1, w2, velscale, sample="all", redo=False,
     hdu4.header["EXTNAME"] = "LOGLAM"
     hdulist = fits.HDUList([hdu1, hdu3, hdu4])
     hdulist.writeto(output, overwrite=True)
+    print(output)
     return
 
-def prepare_muse(sample="test"):
+def prepare_muse(sample="bsf"):
     w1 = 4500
     w2 = 10000
     velscale = 50  # km / s
     starttime = datetime.now()
-    prepare_templates_emiles_muse(w1, w2, velscale, sample=sample, fwhm=2.5,
+    prepare_templates_emiles_muse(w1, w2, velscale, sample=sample, fwhm=2.95,
                                   redo=True)
     endtime = datetime.now()
     print("The program took {} to run".format(endtime - starttime))
@@ -224,7 +226,7 @@ def prepare_wifis():
 
 
 if __name__ == "__main__":
-    prepare_muse()
+    prepare_muse(sample="test")
     # prepare_wifis()
 
 
