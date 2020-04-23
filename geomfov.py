@@ -25,8 +25,8 @@ def calc_extent(image, extension=1):
     ra = array_from_header(image, axis=1, extension=extension)
     dec = array_from_header(image, axis=2, extension=extension)
     # Ofset to the center of NGC 3311
-    ra -= context.ra0
-    dec -= context.dec0
+    ra -= context.ra0.value
+    dec -= context.dec0.value
     # Convert to radians
     X = context.D * 1000 * np.deg2rad(ra)
     Y = context.D * 1000 * np.deg2rad(dec)
@@ -74,8 +74,8 @@ def calc_geom(binfile, imgfile):
 
 def get_geom(field, targetSN, dataset="MUSE"):
     """ Obtain table with geometric parameters given only field and bin S/N"""
-    binfile = os.path.join(context.data_dir, dataset, "combined", field,
-                           "voronoi2d_sn{}.fits".format(targetSN))
+    binfile = os.path.join(context.get_data_dir(dataset), field,
+                           "sn{0}/voronoi2d_sn{0}.fits".format(targetSN))
     imgname, cubename = context.get_field_files(field)
     table = calc_geom(binfile, imgname)
     return table
