@@ -110,9 +110,9 @@ plt.rcParams["ytick.minor.visible"] = True
 plt.rcParams["xtick.top"] = True
 plt.rcParams["ytick.right"] = True
 
-SMALL_SIZE = 8
-MEDIUM_SIZE = 10
-BIGGER_SIZE = 12
+SMALL_SIZE = 7
+MEDIUM_SIZE = 8
+BIGGER_SIZE = 10
 
 plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
 plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
@@ -136,7 +136,7 @@ plt.rcParams['ytick.minor.size'] = minsize
 plt.rcParams['ytick.minor.width'] = width
 plt.rcParams['axes.linewidth'] = width
 
-fig_width = 3.35 # inches
+fig_width = 3.54 # inches - A&A template
 
 flam_unit = u.erg / u.cm / u.cm / u.s / u.AA
 fnu_unit = u.erg / u.s / u.cm / u.cm / u.Hz
