@@ -43,9 +43,10 @@ class PlotVoronoiMaps():
         self.fields = context.fields if fields is None else fields
         self.dataset = dataset
 
-    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 4),
-             arrows=True, sigma=None):
+    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.5),
+             arrows=True, sigma=None, xloc=None):
         """ Make the plots. """
+        xloc = len(self.columns) * [-4] if xloc is None else xloc
         sigma_str = "" if sigma is None else "_sigma{}".format(sigma)
         if xylims is None:
             xylims = [(25, -10), (-25, 20)]
@@ -53,7 +54,7 @@ class PlotVoronoiMaps():
             print(col)
             fig = plt.figure(figsize=figsize)
             gs = gridspec.GridSpec(1,1)
-            gs.update(left=0.11, right=0.96, bottom = 0.1, top=0.98)
+            gs.update(left=0.12, right=0.97, bottom=0.1, top=0.99)
             ax = plt.subplot(gs[0])
             ax.set_facecolor('1')
             plt.minorticks_on()
@@ -97,7 +98,8 @@ class PlotVoronoiMaps():
                           head_width=0.5, alpha=1)
                 plt.text(1., -18, "E", color="b", fontsize=10, va='top')
                 plt.text(-4.3, -12.5, "N", color="b", fontsize=10, va='top')
-            ax.tick_params(axis="both",  which='major', labelsize=10)
+            ax.tick_params(axis="both",  which='major',
+                           labelsize=context.MEDIUM_SIZE)
             if cbbox == "zoom":
                 (x0, x1), (y0, y1) = xylims
                 xsize = x1 - x0
@@ -119,20 +121,19 @@ class PlotVoronoiMaps():
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((-9.6, -12), 8, 3.8, alpha=1,
-                                              zorder=10, color="w",
-                                              edgecolor="r", linewidth=1))
+                plt.gca().add_patch(Rectangle((-9.6, -11.5), 7.2, 3.1, alpha=1,
+                                              zorder=10, edgecolor="w",
+                                              linewidth=1, facecolor="w"))
                 self.draw_colorbar(fig, ax, m, orientation="horizontal",
-                                   cbar_pos=[0.625, 0.2, 0.3, 0.05],
+                                   cbar_pos=[0.63, 0.16, 0.3, 0.05],
                                    ticks=np.linspace(vmin, vmax, 5),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
-                ax.text(-4, -9, self.labels[j], zorder=11)
-
-            output = os.path.join(self.outdir, "{}_sn{}.pdf".format(col,
-                                                                 self.targetSN))
-            plt.savefig(output, dpi=250)
-            plt.show()
+                ax.text(xloc[j], -9.15, self.labels[j], zorder=11)
+            for fmt in ["pdf", "png"]:
+                output = os.path.join(self.outdir,
+                         "{}_sn{}.{}".format(col, self.targetSN, fmt))
+                plt.savefig(output, dpi=250)
             plt.clf()
             plt.close()
         return
@@ -162,7 +163,7 @@ class PlotVoronoiMaps():
         return
 
     def draw_colorbar(self, fig, ax, coll, ticks=None, cblabel="",
-                      cbar_pos=None, cb_fmt="%i", labelsize=9.,
+                      cbar_pos=None, cb_fmt="%i", labelsize=context.MEDIUM_SIZE,
                       orientation="horizontal",
                       ylpos=0.5, xpos=-0.8, rotation=90):
         """ Draws the colorbar in a figure. """
@@ -180,7 +181,7 @@ class PlotVoronoiMaps():
         # ax.text(xpos,ylpos,cblabel,rotation=rotation)
         return
 
-def test_plot(targetSN=250, dataset="MUSE"):
+def make_maps(targetSN=250, dataset="MUSE"):
     """ Produces a test plot using the geometry table. """
     geom = get_geom("fieldA", targetSN)
     geomtab = os.path.join(context.get_data_dir(dataset),
@@ -189,21 +190,31 @@ def test_plot(targetSN=250, dataset="MUSE"):
     wdir = os.path.join(context.get_data_dir(dataset), "fieldA",
                         "sn{}".format(targetSN))
     ppxftable = os.path.join(wdir, "ppxf_vel50_w4500_10000_kinematics.fits")
-    ppxf = Table.read(ppxftable)
+    results = Table.read(ppxftable)
     sn_table = Table.read(os.path.join(wdir, "measured_sn.fits"))
-    ppxf = hstack([geom, ppxf])
-    ppxf = join(ppxf, sn_table, keys="spec")
-    print(ppxf.colnames)
-    ppxf.rename_column("SN/Ang", "SNRperAng")
+    results = hstack([geom, results])
+    results = join(results, sn_table, keys="spec")
+    results.rename_column("SN/Ang", "SNRperAng")
+    # Adding stellar population table
+    stpop = Table.read(os.path.join(wdir, "stpop.fits"))
+    results = join(results, stpop, keys="BIN")
+    results.write(os.path.join(wdir, "results.fits"), overwrite=True)
     outdir = os.path.join(wdir, "plots")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     # cb_fmts = len(geom.colnames) * ["%i"]
-    pvm = PlotVoronoiMaps([ppxf], ["SNRperAng"], outdir,
+    fields = ["SNRperAng", "Z", "T", "imf", "alphaFe", "NaFe"]
+    labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
+              "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]"]
+    cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f"]
+    xloc = [-4, -4.5, -4, -5., -4.5, -4.5]
+    cmaps = ["viridis"] * len(xloc)
+    pvm = PlotVoronoiMaps([results], fields, outdir,
                           targetSN=targetSN, fields=["fieldA"],
-                          labels=["SNR (\\r{A}$^{-1}$)"])
-    xylims = [[10, -10], [-13, 10]]
-    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal")
+                          labels=labels, cb_fmts=cb_fmts, cmaps=cmaps)
+
+    xylims = [[10.1, -10.1], [-12, 9]]
+    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc)
 
 if __name__ == "__main__":
-    test_plot(targetSN=250)
+    make_maps(targetSN=250)
