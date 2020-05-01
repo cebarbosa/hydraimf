@@ -119,8 +119,10 @@ def plot_sigma_imf(t):
         ax.plot(sigma, y, "-", c=colors[i], label=labels[i])
     plt.legend(loc=4, frameon=False)
     ax.set_xlim(140, 350)
+    ax.axhline(y=1.35, c="k", ls="--", lw=0.8)
     ax.axhline(y=1.8, c="k", ls="--", lw=0.8)
     ax.axhline(y=2.35, c="k", ls="--", lw=0.8)
+    ax.text(325, 1.375, "Kroupa")
     ax.text(325, 1.825, "Chabrier")
     ax.text(325, 2.375, "Salpeter")
     plt.subplots_adjust(left=0.08, right=0.98, top=0.99, bottom=0.105,
