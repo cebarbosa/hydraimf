@@ -227,12 +227,15 @@ if __name__ == "__main__":
     fields = ["name", licktype, "{}err".format(licktype)]
     tables = [Table.read(os.path.join(wdir, fname))[fields] for
             fname in filenames]
+    indnames = ['bTiO_muse', 'H_beta', 'Fe5015', 'Mg_1', 'Mg_2', 'Mg_b',
+                'Fe5270', 'Fe5335', 'Fe5406', 'Fe5709', 'Fe5782', 'aTiO',
+                'Na_D', 'TiO_1', 'TiO_2_muse', 'CaH_1',
+                'CaH_2_muse', 'TiO_3', 'TiO_4', 'NaI', 'CaT1', 'CaT2', 'CaT3']
     lick = [np.array(t[t.colnames[1]].data) for t in tables]
     lickerr = [np.array(t[t.colnames[2]].data) for t in tables]
     # Setting indices to be used
     t0 = tables[0]
-    idx = [i for i,_ in enumerate(t0[t0.colnames[1]]) if np.isfinite(_)]
-    indnames = [t0[t0.colnames[0]][i] for i in idx]
+    idx = [i for i,_ in enumerate(t0) if _["name"] in indnames]
     parnames = ["imf", "Z", "T", "alphaFe", "NaFe"]
     lick = [l[idx] for l in lick]
     lickerr = [l[idx] for l in lickerr]
