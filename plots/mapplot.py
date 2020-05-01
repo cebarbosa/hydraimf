@@ -17,6 +17,7 @@ from astropy.table import Table, hstack, join
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
+from matplotlib.colorbar import Colorbar
 import scipy.ndimage as ndimage
 
 import context
@@ -56,7 +57,7 @@ class PlotVoronoiMaps():
             gs = gridspec.GridSpec(1,1)
             gs.update(left=0.12, right=0.97, bottom=0.1, top=0.99)
             ax = plt.subplot(gs[0])
-            ax.set_facecolor('1')
+            ax.set_facecolor("0.85")
             plt.minorticks_on()
             self.make_contours(alpha=0.5)
             kmaps = []
@@ -121,12 +122,12 @@ class PlotVoronoiMaps():
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((-9.6, -11.5), 7.2, 3.1, alpha=1,
+                plt.gca().add_patch(Rectangle((-9.7, -11.5), 8.4, 3.1, alpha=1,
                                               zorder=10, edgecolor="w",
                                               linewidth=1, facecolor="w"))
                 self.draw_colorbar(fig, ax, m, orientation="horizontal",
                                    cbar_pos=[0.63, 0.16, 0.3, 0.05],
-                                   ticks=np.linspace(vmin, vmax, 5),
+                                   ticks=np.linspace(vmin, vmax, 4),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
                 ax.text(xloc[j], -9.15, self.labels[j], zorder=11)
@@ -216,5 +217,81 @@ def make_maps(targetSN=250, dataset="MUSE"):
     xylims = [[10.1, -10.1], [-12, 9]]
     pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc)
 
+def make_triptychs(targetSN=250, dataset="MUSE"):
+    wdir = os.path.join(context.get_data_dir(dataset), "fieldA",
+                        "sn{}".format(targetSN))
+    table= Table.read(os.path.join(wdir, "results.fits"))
+    triptychs = [["SNRperAng", "Z", "NaFe"], ["T", "alphaFe", "imf"]]
+    binsfile = os.path.join(context.get_data_dir(dataset),
+                "fieldA", "sn{0}/voronoi2d_sn{0}.fits".format(targetSN))
+    bins = table["BIN"].astype(np.float)
+    image = context.get_field_files("fieldA")[0]
+    extent = calc_extent(image)
+    extent = offset_extent(extent, "fieldA")
+    binimg = fits.getdata(binsfile)
+    # Image for contours
+    vband = os.path.join(context.home, "images/hydra1.fits")
+    vdata = fits.getdata(vband, verify=False)
+    vdata = np.clip(vdata - 4900., 1., vdata)
+    muv = -2.5 * np.log10(vdata / 480. / 0.252 / 0.252) + 27.2
+    contours = np.linspace(19.5, 23.5, 9)
+    nsigma = 2
+    datasmooth = ndimage.gaussian_filter(muv, nsigma, order=0.)
+    extent_vband = np.array(calc_extent(vband, extension=0))
+    extent_vband[:2] += 3
+    extent_vband[2:] -= 0.2
+    labels = {"SNRperAng": "SNR (\\r{A}$^{-1}$)",
+              "Z": "[Z/H]", "T": "Age (Gyr)",
+              "imf": "$\\Gamma_b$", "alphaFe": r"[$\alpha$/Fe]",
+              "NaFe": "[Na/Fe]"}
+    names = ["maps1", "maps2"]
+    for j, triptych in enumerate(triptychs):
+        fig = plt.figure(figsize=(6.5, 2.8))
+
+        gs = gridspec.GridSpec(2, 3, height_ratios=[0.92, 0.08])
+        gs.update(left=0.08, right=0.99, bottom=0.12, top=0.92, wspace=0.04,
+                  hspace=0.00)
+        for i, col in enumerate(triptych):
+            vector = table[col].astype(np.float)
+            kmap = np.zeros_like(binimg)
+            kmap[:] = np.nan
+            for bin, v in zip(bins, vector):
+                if not np.isfinite(v):
+                    continue
+                idx = np.where(binimg == bin)
+                kmap[idx] = v
+            ax = fig.add_subplot(gs[0, i])
+            ax.set_facecolor("0.85")
+            cs = ax.contour(datasmooth, contours, extent=extent_vband,
+                             colors="k", linewidths=0.8)
+            m = ax.imshow(kmap, origin="bottom", extent=extent,
+                           aspect="equal", alpha=1)
+            ax.set_xlabel("X (kpc)")
+            ax.xaxis.set_label_position('top')
+            ax.xaxis.set_ticks_position('top')
+            ax.tick_params(
+                axis='x',  # changes apply to the x-axis
+                which='both',  # both major and minor ticks are affected
+                bottom=True,
+                top=True,
+                labelbottom=False)
+            cbax = plt.subplot(gs[1, i])
+            cbar = Colorbar(ax=cbax, mappable=m, orientation="horizontal",
+                            ticklocation='bottom')
+            cbar.set_label(labels[col])
+            cbar.ax.xaxis.set_label_position('bottom')
+            if i > 0:
+                ax.yaxis.set_ticklabels([])
+            else:
+                ax.set_ylabel("Y (kpc)")
+        for fmt in ["png", "pdf"]:
+            plt.savefig(os.path.join(wdir, "plots/{}.{}".format(names[j], fmt)),
+                        dpi=300)
+        plt.close()
+
+
+
+
 if __name__ == "__main__":
-    make_maps(targetSN=250)
+    # make_maps(targetSN=250)
+    make_triptychs()
