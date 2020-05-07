@@ -21,16 +21,18 @@ import context
 import misc
 from der_snr import DER_SNR
 
-def run_ppxf(specs, templates_file, outdir, velscale=None, redo=False):
+def run_ppxf(specs, templates_file, outdir, velscale=None, redo=False,
+             degree=-1, mdegree=15, clean=False, V0=None):
     """ Running pPXF. """
     velscale = context.velscale if velscale is None else velscale
     ssp_templates = fits.getdata(templates_file, extname="SSPS").T
     nssps = ssp_templates.shape[1]
     logwave_temp = Table.read(templates_file, hdu=2)["loglam"].data
     wave_temp = np.exp(logwave_temp)
-    start0 = [context.V, 100., 0., 0.]
-    bounds = [[[1800., 5800.], [3., 800.]],
-               [[1800., 5800.], [3., 80.]]]
+    V0 = context.V if V0 is None else V0
+    start0 = [V0, 100., 0., 0.]
+    bounds = [[[V0 - 2000., V0 + 2000], [3., 800.]],
+               [[V0 - 2000., V0 + 2000], [3., 800.]]]
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     for spec in specs:
@@ -65,22 +67,20 @@ def run_ppxf(specs, templates_file, outdir, velscale=None, redo=False):
             ppxf_util.emission_lines(logwave_temp,
                                      [wave[0], wave[-1]], 2.95)
         ngas = gas_templates.shape[1]
-        ####################################################################
         # Preparing the fit
         start = [start0[:2], start0[:2]]
         dv = (logwave_temp[0] - logLam[0]) * \
              constants.c.to("km/s").value
         templates = np.column_stack((ssp_templates, gas_templates))
-        components = np.hstack((np.zeros(nssps), np.ones(ngas))
-                               ).astype(np.int)
+        components = np.hstack((np.zeros(nssps), np.ones(ngas))).astype(np.int)
         gas_component = components > 0
         ########################################################################
         # Fitting with two components
         pp = ppxf.ppxf(templates, galaxy, noise, velscale=velscale,
                   plot=True, moments=[2,2], start=start, vsyst=dv,
-                  lam=np.exp(logLam), component=components, degree=-1,
+                  lam=np.exp(logLam), component=components, degree=degree,
                   gas_component=gas_component, gas_names=line_names,
-                  quiet=False, mdegree=15, bounds=bounds)
+                  quiet=False, mdegree=mdegree, bounds=bounds, clean=clean)
         plt.savefig(os.path.join(outdir, "{}.png".format(name)), dpi=250)
         plt.close()
         pp.name = name
@@ -131,7 +131,7 @@ def make_table(direc, output):
     outtable = vstack(outtable)
     outtable.write(output, format="fits", overwrite=True)
 
-if __name__ == '__main__':
+def run_ngc3311():
     targetSN = 250
     w1 = 4500
     w2 = 10000
@@ -154,3 +154,30 @@ if __name__ == '__main__':
         outtable = os.path.join(os.path.split(wdir)[0], \
             "ppxf_vel{}_w{}_{}_{}.fits".format(int(velscale), w1, w2, sample))
         make_table(outdir, outtable)
+
+def run_m87():
+    targetSN = 500
+    w1 = 4500
+    w2 = 10000
+    sample = "kinematics"
+    velscale = context.velscale
+    tempfile = os.path.join(context.home, "templates",
+               "emiles_muse_vel{}_w{}_{}_{}_fwhm2.95.fits".format(int(velscale),
+                w1, w2, sample))
+    imgname, cubename = context.get_img_cube_m87()
+    wdir = os.path.join(os.path.split(imgname)[0],
+                        "sn{}/sci".format(targetSN))
+    os.chdir(wdir)
+    specs = sorted([_ for _ in os.listdir(".") if _.endswith(".fits")])
+    outdir = os.path.join(os.path.split(os.getcwd())[0],
+                          "ppxf_vel{}_w{}_{}_{}".format(int(velscale),
+                                                        w1, w2, sample))
+    run_ppxf(specs, tempfile, outdir, redo=True, degree=10, mdegree=-1, V0=1284)
+    outtable = os.path.join(os.path.split(wdir)[0], \
+        "ppxf_vel{}_w{}_{}_{}.fits".format(int(velscale), w1, w2, sample))
+    make_table(outdir, outtable)
+
+
+if __name__ == '__main__':
+    # run_ngc3311()
+    run_m87()

@@ -15,6 +15,8 @@ import os
 import numpy as np
 from astropy.io import fits, ascii
 from astropy.table import Table
+import astropy.units as u
+from astropy.coordinates import SkyCoord
 
 from vorbin.voronoi_2d_binning import voronoi_2d_binning
 
@@ -189,11 +191,10 @@ def make_voronoi_image(bintable, img, targetSN, redo=False, output=None):
     hdu.writeto(output, overwrite=True)
     return output
 
-def sort_voronoi2D(voronoi2D, imgname):
+def sort_voronoi2D(voronoi2D, geom):
     """ Sort Voronoi tesselation to be increasing as a function of the radius"""
     vor = fits.getdata(voronoi2D)
     newvor = np.zeros_like(vor) * np.nan
-    geom = calc_geom(voronoi2D, imgname)
     r = np.array(geom["R"]).astype(float)
     idx = np.argsort(r)
     geom = geom[idx]
@@ -204,7 +205,7 @@ def sort_voronoi2D(voronoi2D, imgname):
     hdu.writeto(voronoi2D, overwrite=True)
     return voronoi2D
 
-def combine_spectra(cubename, voronoi2D, targetSN, field, redo=False):
+def combine_spectra(cubename, voronoi2D, targetSN, objname=None, redo=False):
     """ Produces the combined spectra for a given binning file.
 
     Input Parameters
@@ -218,10 +219,14 @@ def combine_spectra(cubename, voronoi2D, targetSN, field, redo=False):
     targetSN : float
         Value of the S/N ratio used in the tesselation
 
+    objname : str
+        Identification name for data. Default is spec.
+
     redo : bool
         Redo combination in case the output spec already exists.
 
     """
+    objname = "spec" if objname is None else objname
     outdir = os.path.join(os.getcwd(), "sn{}/spec1d".format(targetSN))
     if not os.path.exists(outdir):
         os.mkdir(outdir)
@@ -235,8 +240,8 @@ def combine_spectra(cubename, voronoi2D, targetSN, field, redo=False):
         idx, idy = np.where(vordata == bin)
         ncombine = len(idx)
         print("Bin {0} / {1} (ncombine={2})".format(j + 1, bins.size, ncombine))
-        output = os.path.join(outdir, "{}_sn{}_{:04d}.fits".format(field,
-                              targetSN, int(bin)))
+        output = os.path.join(outdir, "{}_sn{}_{:04d}.fits".format(objname,
+                                                                   targetSN, int(bin)))
         if os.path.exists(output) and not redo:
             continue
         errs = np.sqrt(np.nanmean(variance[:,idx,idy], axis=1))
@@ -245,7 +250,7 @@ def combine_spectra(cubename, voronoi2D, targetSN, field, redo=False):
         table.write(output, overwrite=True)
     return
 
-if __name__ == '__main__':
+def run_ngc3311():
     fields = ["fieldA"]
     dataset = "MUSE"
     targetSN = 250
@@ -265,3 +270,29 @@ if __name__ == '__main__':
         voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=False)
         voronoi2D = sort_voronoi2D(voronoi2D, imgname)
         combine_spectra(cubename, voronoi2D, targetSN, field, redo=False)
+
+def run_m87():
+    targetSN = 500
+    coords = SkyCoord("12h30m49.4s +12d23m28s")
+    D = 14.5 * u.kpc
+    imgname, cubename = context.get_img_cube_m87()
+    wdir = os.path.split(imgname)[0]
+    os.chdir(wdir)
+    snimg = os.path.join(wdir, "signal_noise.fits")
+    collapse_cube(cubename, snimg, redo=True)
+    signal = fits.getdata(snimg, 1)
+    noise = fits.getdata(snimg, 2)
+    mask = fits.getdata("simple_binning.fits")
+    outdir = os.path.join(wdir, "sn{}".format(targetSN))
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+    bintable = calc_binning(signal, noise, mask, targetSN, redo=False)
+    voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=False)
+    geom = calc_geom(voronoi2D, imgname, coords, D)
+    voronoi2D = sort_voronoi2D(voronoi2D, geom)
+    combine_spectra(cubename, voronoi2D, targetSN, objname="m87", redo=False)
+
+
+if __name__ == '__main__':
+    # run_ngc3311()
+    run_m87()

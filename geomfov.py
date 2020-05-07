@@ -20,16 +20,14 @@ from astropy.table import Table
 import context
 from misc import array_from_header
 
-def calc_extent(image, extension=1):
-    h = fits.getheader(image)
+def calc_extent(image, coords, D, extension=1):
     ra = array_from_header(image, axis=1, extension=extension)
     dec = array_from_header(image, axis=2, extension=extension)
     # Ofset to the center of NGC 3311
-    ra -= context.ra0.value
-    dec -= context.dec0.value
-    # Convert to radians
-    X = context.D * 1000 * np.deg2rad(ra)
-    Y = context.D * 1000 * np.deg2rad(dec)
+    ra -= coords.ra.value
+    dec -= coords.dec.value
+    X = D.value * 1000 * np.deg2rad(ra)
+    Y = D.value * 1000 * np.deg2rad(dec)
     # Scale to the distance of the cluster
     extent = np.array([X[0], X[-1], Y[0], Y[-1]])
     return extent
@@ -46,10 +44,10 @@ def offset_extent(extent, field):
         extent[:2] -= 1.5
     return extent
 
-def calc_geom(binfile, imgfile):
+def calc_geom(binfile, imgfile, coords, D):
     """Calculate the location of bins for a given target S/N and field. """
     binimg = fits.getdata(binfile)
-    extent = calc_extent(imgfile)
+    extent = calc_extent(imgfile, coords, D)
     #  TODO: check if geometry is correct in MUSE-DEEP data set
     # extent = offset_extent(extent, field)
     ydim, xdim = binimg.shape

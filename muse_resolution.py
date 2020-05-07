@@ -130,8 +130,35 @@ def broad_binned(fields, res, targetSN=70, dataset="MUSE"):
                              names=["wave", "flux", "fluxerr"])
             newtable.write(output, overwrite=True)
 
+def homogeneize_resolution_m87(res=2.95, targetSN=500, dataset="MUSE"):
+    """ Performs convolution to homogeneize the resolution. """
+    imgname, cubename = context.get_img_cube_m87()
+    input_dir = os.path.join(os.path.split(imgname)[0], "sn{}".format(targetSN),
+                    "spec1d")
+    output_dir = "{}_FWHM{}".format(input_dir, res)
+    if not(os.path.exists(output_dir)):
+        os.mkdir(output_dir)
+    specs = sorted([_ for _ in os.listdir(input_dir) if _.endswith(".fits")])
+    for i, filename in enumerate(specs):
+        print("Convolving file {} ({} / {})".format(filename, i+1,
+                                                    len(specs)))
+        filepath = os.path.join(input_dir, filename)
+        output = os.path.join(output_dir, filename)
+        data = Table.read(filepath, format="fits")
+        wave = data["wave"]
+        flux = data["flux"]
+        fluxerr = data["fluxerr"]
+        muse_fwhm = get_muse_fwhm()
+        obsres = muse_fwhm(wave)
+        newflux, newfluxerr = broad2res(wave, flux, obsres,
+                                        res, fluxerr=fluxerr)
+        newtable = Table([wave, newflux, newfluxerr],
+                         names=["wave", "flux", "fluxerr"])
+        newtable.write(output, overwrite=True)
+
 
 if __name__ == "__main__":
     # plot_muse_fwhm()
     # plot_vel_resolution()
-    broad_binned(context.fields[:1], 2.95, targetSN=250, dataset="MUSE")
+    # broad_binned(context.fields[:1], 2.95, targetSN=250, dataset="MUSE")
+    homogeneize_resolution_m87()

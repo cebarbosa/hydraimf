@@ -73,7 +73,7 @@ def run_sextractor(img, redo=False, outfile=None, segmentation_file=None,
     cat["table"].write(outfile, format="fits", overwrite=True)
     return outfile
 
-def mask_sources(img, cat, field, redo=False, output=None):
+def mask_sources(img, cat, ignore=None, redo=False, output=None):
     """ Produces segmentation image with bins for detected sources using
     elliptical regions. """
     if output is None:
@@ -84,9 +84,10 @@ def mask_sources(img, cat, field, redo=False, output=None):
     ydim, xdim = data.shape
     xx, yy = np.meshgrid(np.arange(1, xdim + 1), np.arange(1, ydim + 1))
     table = Table.read(cat, 1)
-    ignore = ignore_sources(field)
-    idx = np.array([i for i,x in enumerate(table["NUMBER"]) if x not in ignore])
-    table = table[idx]
+    if ignore is not None:
+        idx = np.array([i for i,x in enumerate(table["NUMBER"]) if x not in
+                        ignore])
+        table = table[idx]
     axratio = table["B_IMAGE"] / table["A_IMAGE"]
     table = table[axratio > 0.4]
     segmentation = np.zeros_like(data)
@@ -121,7 +122,7 @@ def ignore_sources(field):
     else:
         return []
 
-def simple_binning(img, field):
+def simple_binning(img, field=None):
     """ Includes additional bins to halo before Voronoi. """
     outfile = "simple_binning.fits"
     data = fits.getdata(img)
@@ -160,7 +161,7 @@ def simple_binning(img, field):
     hdu.writeto(outfile, overwrite=True)
     return
 
-if __name__ == "__main__":
+def run_ngc3311():
     dataset = "MUSE"
     data_dir = os.path.join(context.data_dir, dataset, "combined")
     os.chdir(data_dir)
@@ -172,5 +173,22 @@ if __name__ == "__main__":
         imgum = make_unsharp_mask(imgname, redo=False)
         immasked = mask_regions(imgum, redo=False)
         sexcat = run_sextractor(immasked, redo=False)
-        imhalo = mask_sources(immasked, sexcat, field, redo=True)
-        simple_binning(imhalo, field)
+        ignore = ignore(field)
+        imhalo = mask_sources(immasked, sexcat, ignore=ignore, redo=True)
+        simple_binning(imhalo, field=field)
+
+def run_m87():
+    imgname, cubename = context.get_img_cube_m87()
+    wdir = os.path.split(imgname)[0]
+    os.chdir(wdir)
+    imgum = make_unsharp_mask(imgname, redo=False)
+    immasked = mask_regions(imgum, redo=False)
+    sexcat = run_sextractor(immasked, redo=False)
+    ignore = [86, 67, 70, 73, 79, 68, 1, 66]
+    imhalo = mask_sources(immasked, sexcat, ignore=ignore, redo=True)
+    simple_binning(imhalo)
+
+
+if __name__ == "__main__":
+    # run_ngc3311()
+    run_m87()
