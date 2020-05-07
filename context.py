@@ -45,11 +45,21 @@ def get_field_files(field, dataset="MUSE"):
     else:
         raise ValueError("Data set name not defined: {}".format(dataset))
 
+def get_img_cube_m87():
+    """ Get image and cube file names for M87. """
+    wdir = os.path.join(home, "data/M87")
+    img = os.path.join(wdir, "ADP.2017-03-23T15:06:13.508.fits")
+    # cube = os.path.join(wdir, "ADP.2017-03-23T15:06:13.507.fits")
+    cube = os.path.join(wdir, "M87_DATACUBE.fits")
+    return img, cube
+
 def get_data_dir(dataset):
     if dataset == "MUSE-DEEP":
         return os.path.join(home, "data/MUSE-DEEP")
     elif dataset == "MUSE":
-        return os.path.join(home, "data/MUSE/combined" )
+        return os.path.join(home, "data/MUSE/combined")
+    elif dataset == "M87":
+        return os.path.join(home, "data/M87")
 
 # Emission lines used in the projects
 def get_emission_lines():
