@@ -14,9 +14,11 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import pymc3 as pm
 import theano.tensor as tt
 import seaborn as sns
+from tqdm import tqdm
 
 import context
 import bsf
@@ -209,6 +211,50 @@ def plot_corner(trace, params, db, redo=False):
     plt.close(fig)
     return
 
+def plot_fitting(lick, lickerr, spindex, traces, outfig, redo=False):
+    """ Produces plot for the fitting. """
+    if os.path.exists("{}.png".format(outfig)) and not redo:
+        return
+    percs = np.linspace(5, 85, 9)
+    fracs = np.array([0.2, 0.4, 0.6, 0.8, 1, 0.8, 0.6, 0.4, 0.2])
+    colors = [cm.get_cmap("Oranges")(f) for f in fracs]
+    Ia = np.zeros((len(traces), spindex.nindices))
+    from tqdm import tqdm
+    for i in tqdm(range(len(traces))):
+        Ia[i] = spindex(traces[i])
+    x = np.median(Ia, axis=0)
+    fig = plt.figure(figsize=(context.fig_width, 3.5))
+    ax = plt.subplot(121)
+    plt.tick_params(axis="y", which="minor", left=False, right=False)
+    names = [_.replace("_", "").replace("muse", "*") for _ in
+             spindex.indnames]
+    ax.errorbar(lick, names, xerr=lickerr, fmt="o", mec="w", mew=0.4,
+                elinewidth=0.8)
+    for c, per in zip(colors, percs):
+        ax.fill_betweenx(names, np.percentile(Ia, per, axis=0),
+                         np.percentile(Ia, per + 10, axis=0), color=c)
+    # ax.errorbar(x, names, xerr=xerr, fmt="o", mec="w", mew=0.4)
+    ax.set_xlabel(r"Equivalent width (\r{A})")
+    plt.subplots_adjust(left=0.2, right=0.98)
+    ax = plt.subplot(122)
+    plt.tick_params(axis="y", which="minor", left=False, right=False)
+    ax.errorbar(lick - x, names, xerr=lickerr, fmt="o", mec="w", mew=0.4,
+                elinewidth=0.8)
+    for c, per in zip(colors, percs):
+        ax.fill_betweenx(names, np.percentile(Ia, per, axis=0) - x,
+                         np.percentile(Ia, per + 10, axis=0) - x, color=c)
+    ax.set_xlabel(r"Residue (\r{A})")
+    ax.yaxis.set_ticklabels([])
+    ax.axvline(x=0, ls="--", c="k", lw=0.8)
+    plt.subplots_adjust(left=0.12, right=0.98, wspace=0.02, top=0.953,
+                        bottom=0.095)
+    plt.suptitle("NGC 3311 spectrum {}".format(outfig.split("_")[3]), x=0.57,
+                 y=0.99, fontsize=9)
+    for fmt in ["png", "pdf"]:
+        plt.savefig("{}.{}".format(outfig, fmt), dpi=250, overwrite=True)
+    plt.close()
+    return
+
 if __name__ == "__main__":
     targetSN = 250
     w1 = 4500
@@ -258,7 +304,9 @@ if __name__ == "__main__":
         outdb = os.path.join(outdir, fname.split(".")[0])
         run_bsf(l, lerr, spindex, outdb)
         traces = load_traces(outdb, parnames)
-        plot_corner(traces, parnames, outdb, redo=True)
+        plot_corner(traces, parnames, outdb, redo=False)
+        outfig = "{}_fit".format(outdb)
+        plot_fitting(l, lerr, spindex, traces, outfig, redo=True)
         t = make_table(traces, parnames, outdb)
         ts.append(t)
     ts = vstack(ts)
