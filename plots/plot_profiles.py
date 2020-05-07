@@ -13,13 +13,14 @@ from astropy.table import Table
 import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.cm as cm
+import matplotlib.gridspec as gridspec
 
 import context
 
-def plot_profiles(t, output, xfield, yfields):
-    labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma$ (km/s)",
-              "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
-              "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
+def plot_profiles(t, output, xfield, yfields, redo=False):
+    if os.path.exists(output) and not redo:
+        return
+    global labels
     fig = plt.figure(figsize=(context.fig_width, 6))
     for i, field in enumerate(yfields):
         yerr = [t["{}_lerr".format(field)], t["{}_uerr".format(field)]]
@@ -41,9 +42,7 @@ def plot_profiles(t, output, xfield, yfields):
 
 def plot_single(t, output, xfield, yfield, return_ax=False, label=None,
                 figsize=None):
-    labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma$ (km/s)",
-              "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
-              "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
+    global labels
     figsize = (context.fig_width, 2.8) if figsize is None else figsize
     fig = plt.figure(figsize=figsize)
     yerr = [t["{}_lerr".format(yfield)], t["{}_uerr".format(yfield)]]
@@ -70,16 +69,13 @@ def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
         cmap(np.linspace(minval, maxval, n)))
     return new_cmap
 
-def plot_sigma_imf(t):
+def plot_sigma_imf(t, figsize=(5,3)):
     # Producing plot similar to Spiniello+ 2014
+    global labels
     output = os.path.join(outdir, "sigma_imf")
-    labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma$ (km/s)",
-              "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
-              "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
     xfield = "sigma"
     yfield = "imf"
     label = "NGC 3311"
-    figsize=(5,3)
     fig = plt.figure(figsize=figsize)
     xs = t[xfield]
     ys = t[yfield]
@@ -137,12 +133,103 @@ def plot_sigma_imf(t):
         plt.savefig("{}.{}".format(output, fmt), dpi=250)
     plt.close()
 
+def plot_sarzi(t, figsize=(6.5, 2.2)):
+    global labels
+    output = os.path.join(outdir, "imf_Z-alphafe-sigma")
+    R = t["R"]
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=max(R),
+                                       clip=True)
+    cmap = plt.get_cmap('Blues_r')
+    new_cmap = truncate_colormap(cmap, 0.0, 0.5)
+    mapper = cm.ScalarMappable(norm=norm, cmap=new_cmap)
+    colors = np.array([(mapper.to_rgba(v)) for v in R])
+    yfield = "imf"
+    ys = t[yfield]
+    yerrs =  np.array([t["{}_lerr".format(yfield)], t["{}_uerr".format(
+        yfield)]]).T
+    xfields = ["Z", "alphaFe", "sigma"]
+    fig = plt.figure(figsize=figsize)
+    widths = [1, 1, 1, 0.1]
+    gs = gridspec.GridSpec(1, 4, figure=fig, width_ratios=widths)
+    gs.update(left=0.06, right=0.955, bottom=0.15, top=0.98, wspace=0.02,
+              hspace=0.00)
+    xlims = [[-0.35, 0.42], [-0.02, 0.38], [170, 360]]
+    for i, xfield in enumerate(xfields):
+        xs = t[xfield]
+        xerrs = np.array([t["{}_lerr".format(xfield)], t["{}_uerr".format(
+            xfield)]]).T
+        ax = plt.subplot(gs[i])
+        for x, y, xerr, yerr, c in zip(xs, ys, xerrs, yerrs, colors):
+            ax.errorbar(x, y, yerr=np.atleast_2d(yerr).T,
+                        xerr=np.atleast_2d(xerr).T, fmt="o",
+                        ecolor="0.8", mec="w", color=c,
+                        mew=0.5, elinewidth=0.5)
+        ax.set_xlabel(labels[xfield])
+        if i == 0:
+            ax.set_ylabel(labels[yfield])
+        else:
+            ax.yaxis.set_ticklabels([])
+        # IMF lines
+        ax.axhline(y=1.35, c="k", ls="--", lw=0.8)
+        ax.axhline(y=1.8, c="k", ls="--", lw=0.8)
+        ax.axhline(y=2.35, c="k", ls="--", lw=0.8)
+        if i == 0:
+            ax.text(-0.22, 1.37, "Kroupa", size=5)
+            ax.text(-0.32, 1.82, "Chabrier", size=5)
+            ax.text(-0.32, 2.37, "Salpeter", size=5)
+        ax.set_xlim(xlims[i])
+        ax.set_ylim(0.45, 3.7)
+        # Specific details for each plot
+        if xfield == "sigma":
+            sigma = np.linspace(180, 320, 100)
+            # Plot other authors
+            a = [4.87, 3.4]
+            b = [2.33, 2.3]
+            plabels = ["Ferreras et al. (2013)", "La Barbera et al. (2013)"]
+            colors = ["C2", "C3"]
+            for i in range(2):
+                y = a[i] * np.log10(sigma / 200) + b[i]
+                ax.plot(sigma, y, "-", c=colors[i], label=plabels[i])
+            # Spiniello 2014
+            a = np.random.normal(2.3, 0.1, len(sigma))
+            b = np.random.normal(2.1, 0.2, len(sigma))
+            y = a * np.log10(sigma / 200)[:, np.newaxis] + b
+            ax.plot(sigma, y.mean(axis=1), "-", c="C1",
+                    label="Spiniello et al. (2014)")
+            ax.plot(sigma, np.percentile(y, 16, axis=1), "--", c="C1")
+            ax.plot(sigma, np.percentile(y, 84, axis=1), "--", c="C1")
+            plt.legend(loc=4, frameon=False, prop={'size': 4})
+        if xfield == "Z":
+            z = np.linspace(-0.4, 0.45, 50)
+            ax.plot(z, 2.2 + z * 3.1, "-", c="C4",
+                    label=r"Mart\'in-Navarro et al. (2013)")
+            plt.legend(loc=3, frameon=False, prop={'size': 4})
+        if xfield == "alphaFe":
+            ax.plot([0.29, 0.42], [2, 2.9], "-", c="C5",
+                    label="Sarzi et al. (2018)")
+            plt.legend(loc=4, frameon=False, prop={'size': 4})
+
+
+    cax = fig.add_subplot(gs[3])
+    cbar = fig.colorbar(mapper, cax=cax, orientation="vertical")
+    cbar.set_label("R (kpc)")
+    for fmt in ["pdf", "png"]:
+        plt.savefig("{}.{}".format(output, fmt), dpi=300)
+    plt.close()
+
+
+
 if __name__ == "__main__":
+    labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma$ (km/s)",
+              "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
+              "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
     dataset = "MUSE"
     targetSN = 250
     wdir =  os.path.join(context.get_data_dir(dataset),
                          "fieldA/sn{}".format(targetSN))
     outdir = os.path.join(wdir, "plots")
+    ############################################################################
+    # Loading and preparing data
     tfile = os.path.join(wdir, "results.fits")
     t = Table.read(tfile)
     t["sigma_lerr"] = t["sigmaerr"]
@@ -151,10 +238,15 @@ if __name__ == "__main__":
     t["V_uerr"] = t["Verr"]
     t["R_uerr"] = 0
     t["R_lerr"] = 0
+    ############################################################################
     output = os.path.join(outdir, "radial_profiles")
     plot_profiles(t, output, "R",
-                  ["sigma", "imf", "Z", "T", "alphaFe", "NaFe"])
+                  ["sigma", "imf", "Z", "T", "alphaFe", "NaFe"], redo=False)
+    ############################################################################
     output = os.path.join(outdir, "sigma_profiles")
-    # plot_profiles(t, output, "sigma", ["imf", "Z", "T", "alphaFe", "NaFe"])
-    plot_sigma_imf(t)
+    plot_profiles(t, output, "sigma", ["imf", "Z", "T", "alphaFe", "NaFe"],
+                  redo=False)
+    ############################################################################
     # plot_single(t, output, "Z", "imf")
+    # plot_sigma_imf(t)
+    plot_sarzi(t)
