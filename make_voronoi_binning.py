@@ -279,7 +279,7 @@ def run_m87():
     wdir = os.path.split(imgname)[0]
     os.chdir(wdir)
     snimg = os.path.join(wdir, "signal_noise.fits")
-    collapse_cube(cubename, snimg, redo=True)
+    collapse_cube(cubename, snimg, redo=False)
     signal = fits.getdata(snimg, 1)
     noise = fits.getdata(snimg, 2)
     mask = fits.getdata("simple_binning.fits")
@@ -289,6 +289,7 @@ def run_m87():
     bintable = calc_binning(signal, noise, mask, targetSN, redo=False)
     voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=False)
     geom = calc_geom(voronoi2D, imgname, coords, D)
+    geom.write(os.path.join(outdir, "geom.fits"))
     voronoi2D = sort_voronoi2D(voronoi2D, geom)
     combine_spectra(cubename, voronoi2D, targetSN, objname="m87", redo=False)
 
