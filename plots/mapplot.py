@@ -12,8 +12,10 @@ Adapted on 24/03/2018 to use in hydraimf project
 import os
 
 import numpy as np
+import astropy.units as u
 from astropy.io import fits
 from astropy.table import Table, hstack, join
+from astropy.coordinates import SkyCoord
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
@@ -43,6 +45,8 @@ class PlotVoronoiMaps():
         self.targetSN = targetSN
         self.fields = context.fields if fields is None else fields
         self.dataset = dataset
+        self.coords = SkyCoord(context.ra0, context.dec0)
+        self.D = context.D * u.Mpc
 
     def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.5),
              arrows=True, sigma=None, xloc=None):
@@ -68,7 +72,7 @@ class PlotVoronoiMaps():
                 bins = table["BIN"].astype(np.float)
                 vector = table[col].astype(np.float)
                 image = context.get_field_files(field)[0]
-                extent = calc_extent(image)
+                extent = calc_extent(image, self.coords, self.D)
                 extent = offset_extent(extent, field)
                 binimg = fits.getdata(binsfile)
                 kmap = np.zeros_like(binimg)
@@ -150,7 +154,8 @@ class PlotVoronoiMaps():
             contours = np.linspace(19.5,23.5,9)
         datasmooth = ndimage.gaussian_filter(muv, nsigma, order=0.)
         if extent is None:
-            extent = np.array(calc_extent(vband, extension=0))
+            extent = np.array(calc_extent(vband, self.coords,
+                                          self.D, extension=0))
             extent[:2] += 3
             extent[2:] -=0.2
         cs = plt.contour(datasmooth, contours, extent=extent,
@@ -293,5 +298,5 @@ def make_triptychs(targetSN=250, dataset="MUSE"):
 
 
 if __name__ == "__main__":
-    # make_maps(targetSN=250)
-    make_triptychs()
+    make_maps(targetSN=250)
+    # make_triptychs()
