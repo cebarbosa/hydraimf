@@ -14,6 +14,7 @@ import os
 
 import numpy as np
 import astropy.units as u
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 
@@ -26,8 +27,8 @@ def calc_extent(image, coords, D, extension=1):
     # Ofset to the center of NGC 3311
     ra -= coords.ra.value
     dec -= coords.dec.value
-    X = D.value * 1000 * np.deg2rad(ra)
-    Y = D.value * 1000 * np.deg2rad(dec)
+    X = D.to("kpc").value * np.deg2rad(ra)
+    Y = D.to("kpc").value * np.deg2rad(dec)
     # Scale to the distance of the cluster
     extent = np.array([X[0], X[-1], Y[0], Y[-1]])
     return extent
@@ -75,7 +76,8 @@ def get_geom(field, targetSN, dataset="MUSE"):
     binfile = os.path.join(context.get_data_dir(dataset), field,
                            "sn{0}/voronoi2d_sn{0}.fits".format(targetSN))
     imgname, cubename = context.get_field_files(field)
-    table = calc_geom(binfile, imgname)
+    coords = SkyCoord(context.ra0, context.dec0)
+    table = calc_geom(binfile, imgname, coords, context.D * u.Mpc)
     return table
 
 
