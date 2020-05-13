@@ -35,6 +35,9 @@ class LogLike(tt.Op):
             self.likelihood = StudTLogLike(self.data, self.sigma, self.stpop)
         elif self.loglike == "normal":
             self.likelihood = NormalLogLike(self.data, self.sigma, self.stpop)
+        elif self.loglike == "normal2":
+            self.likelihood = NormalWithErrorsLogLike(self.data, self.sigma,
+                                                      self.stpop)
         # initialise the gradient Op (below)
         self.logpgrad = LogLikeGrad(self.likelihood)
 
