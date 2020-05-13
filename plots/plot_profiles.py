@@ -108,11 +108,11 @@ def plot_sigma_imf(t, figsize=(5,3)):
     # Plot other authors
     a = [4.87, 3.4]
     b = [2.33, 2.3]
-    labels = ["Ferreras et al. (2013)", "La Barbera et al. (2013)"]
+    plabels = ["Ferreras et al. (2013)", "La Barbera et al. (2013)"]
     colors = ["C2", "C3"]
     for i in range(2):
         y = a[i] * np.log10(sigma / 200) + b[i]
-        ax.plot(sigma, y, "-", c=colors[i], label=labels[i])
+        ax.plot(sigma, y, "-", c=colors[i], label=plabels[i])
     plt.legend(loc=4, frameon=False)
     ax.set_xlim(140, 350)
     ax.axhline(y=1.35, c="k", ls="--", lw=0.8)
@@ -121,7 +121,7 @@ def plot_sigma_imf(t, figsize=(5,3)):
     ax.text(325, 1.375, "Kroupa")
     ax.text(325, 1.825, "Chabrier")
     ax.text(325, 2.375, "Salpeter")
-    plt.subplots_adjust(left=0.08, right=0.98, top=0.99, bottom=0.105,
+    plt.subplots_adjust(left=0.07, right=0.98, top=0.99, bottom=0.105,
                         hspace=0.06)
     cbar_pos = [0.14, 0.18, 0.18, 0.05]
     cbaxes = fig.add_axes(cbar_pos)
@@ -133,7 +133,7 @@ def plot_sigma_imf(t, figsize=(5,3)):
         plt.savefig("{}.{}".format(output, fmt), dpi=250)
     plt.close()
 
-def plot_sarzi(t, figsize=(6.5, 2.2)):
+def plot_sarzi(t, figsize=(7.24, 2.5)):
     global labels
     output = os.path.join(outdir, "imf_Z-alphafe-sigma")
     R = t["R"]
@@ -149,9 +149,9 @@ def plot_sarzi(t, figsize=(6.5, 2.2)):
         yfield)]]).T
     xfields = ["Z", "alphaFe", "sigma"]
     fig = plt.figure(figsize=figsize)
-    widths = [1, 1, 1, 0.1]
+    widths = [1, 1, 1, 0.08]
     gs = gridspec.GridSpec(1, 4, figure=fig, width_ratios=widths)
-    gs.update(left=0.06, right=0.955, bottom=0.15, top=0.98, wspace=0.02,
+    gs.update(left=0.06, right=0.955, bottom=0.13, top=0.98, wspace=0.02,
               hspace=0.00)
     xlims = [[-0.35, 0.42], [-0.02, 0.38], [170, 360]]
     for i, xfield in enumerate(xfields):
@@ -170,13 +170,13 @@ def plot_sarzi(t, figsize=(6.5, 2.2)):
         else:
             ax.yaxis.set_ticklabels([])
         # IMF lines
-        ax.axhline(y=1.35, c="k", ls="--", lw=0.8)
-        ax.axhline(y=1.8, c="k", ls="--", lw=0.8)
-        ax.axhline(y=2.35, c="k", ls="--", lw=0.8)
+        ax.axhline(y=1.3, c="k", ls="--", lw=0.8)
+        # ax.axhline(y=1.8, c="k", ls="--", lw=0.8)
+        # ax.axhline(y=2.35, c="k", ls="--", lw=0.8)
         if i == 0:
-            ax.text(-0.22, 1.37, "Kroupa", size=5)
-            ax.text(-0.32, 1.82, "Chabrier", size=5)
-            ax.text(-0.32, 2.37, "Salpeter", size=5)
+            ax.text(-0.15, 1.32, "Kroupa", size=6)
+            # ax.text(-0.32, 1.82, "Chabrier", size=5)
+            # ax.text(-0.32, 2.37, "Salpeter", size=5)
         ax.set_xlim(xlims[i])
         ax.set_ylim(0.45, 3.7)
         # Specific details for each plot
@@ -187,37 +187,47 @@ def plot_sarzi(t, figsize=(6.5, 2.2)):
             b = [2.33, 2.3]
             plabels = ["Ferreras et al. (2013)", "La Barbera et al. (2013)"]
             colors = ["C2", "C3"]
-            for i in range(2):
+            for i in [0]:
                 y = a[i] * np.log10(sigma / 200) + b[i]
                 ax.plot(sigma, y, "-", c=colors[i], label=plabels[i])
             # Spiniello 2014
-            a = np.random.normal(2.3, 0.1, len(sigma))
-            b = np.random.normal(2.1, 0.2, len(sigma))
-            y = a * np.log10(sigma / 200)[:, np.newaxis] + b
+            # a = np.random.normal(2.3, 0.1, len(sigma))
+            # b = np.random.normal(2.1-1, 0.2, len(sigma))
+            # y = a * np.log10(sigma / 200)[:, np.newaxis] + b
+            # ax.plot(sigma, y.mean(axis=1), "-", c="C1",
+            #         label="Spiniello et al. (2014)")
+            # ax.plot(sigma, np.percentile(y, 16, axis=1), "--", c="C1")
+            # ax.plot(sigma, np.percentile(y, 84, axis=1), "--", c="C1")
+            # La Barbera 2013
+            b = np.random.normal(2.4, 0.1, len(sigma))
+            a = np.random.normal(5.4, 0.9, len(sigma))
+            y = a * np.log10(sigma / 200.)[:, np.newaxis] + b
             ax.plot(sigma, y.mean(axis=1), "-", c="C1",
-                    label="Spiniello et al. (2014)")
+                    label="La Barbera et al. (2013)")
             ax.plot(sigma, np.percentile(y, 16, axis=1), "--", c="C1")
             ax.plot(sigma, np.percentile(y, 84, axis=1), "--", c="C1")
-            plt.legend(loc=4, frameon=False, prop={'size': 4})
+            plt.legend(loc=4, frameon=False, prop={'size': 6})
         if xfield == "Z":
             z = np.linspace(-0.4, 0.45, 50)
-            ax.plot(z, 2.2 + z * 3.1, "-", c="C4",
-                    label=r"Mart\'in-Navarro et al. (2013)")
-            plt.legend(loc=3, frameon=False, prop={'size': 4})
+            # Martin-Navarro 2015
+            a = np.random.normal(3.1, 0.5, len(z))
+            b = np.random.normal(2.2, 0.1, len(z))
+            y = a * z[:, np.newaxis] + b
+            ax.plot(z, y.mean(axis=1), "-", c="C4",
+                    label="Martín-Navarro et al.(2015)")
+            ax.plot(z, np.percentile(y, 16, axis=1), "--", c="C4")
+            ax.plot(z, np.percentile(y, 84, axis=1), "--", c="C4")
+            plt.legend(loc=3, frameon=False, prop={'size': 6})
         if xfield == "alphaFe":
             ax.plot([0.29, 0.42], [2, 2.9], "-", c="C5",
                     label="Sarzi et al. (2018)")
-            plt.legend(loc=4, frameon=False, prop={'size': 4})
-
-
+            plt.legend(loc=4, frameon=False, prop={'size': 6})
     cax = fig.add_subplot(gs[3])
     cbar = fig.colorbar(mapper, cax=cax, orientation="vertical")
     cbar.set_label("R (kpc)")
     for fmt in ["pdf", "png"]:
         plt.savefig("{}.{}".format(output, fmt), dpi=300)
     plt.close()
-
-
 
 if __name__ == "__main__":
     labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma$ (km/s)",
@@ -241,12 +251,15 @@ if __name__ == "__main__":
     ############################################################################
     output = os.path.join(outdir, "radial_profiles")
     plot_profiles(t, output, "R",
-                  ["sigma", "imf", "Z", "T", "alphaFe", "NaFe"], redo=False)
+                  ["T", "Z", "imf", "alphaFe", "NaFe", "sigma"], redo=True)
     ############################################################################
     output = os.path.join(outdir, "sigma_profiles")
     plot_profiles(t, output, "sigma", ["imf", "Z", "T", "alphaFe", "NaFe"],
-                  redo=False)
+                  redo=True)
     ############################################################################
-    # plot_single(t, output, "Z", "imf")
-    # plot_sigma_imf(t)
+    output = os.path.join(outdir, "metal_imf")
+    plot_single(t, output, "Z", "imf")
+    plt.close()
+    plot_sigma_imf(t)
+    plt.close()
     plot_sarzi(t)
