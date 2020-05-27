@@ -18,7 +18,7 @@ import numpy as np
 import astropy.units as u
 from astropy.table import Table
 from astropy.io import fits
-import ppxf.ppxf_util as util
+import ppxf_util as util
 from tqdm import tqdm
 
 import context
@@ -96,15 +96,41 @@ class EMiles_models():
                "8:1.1f}.fits".format(imf, msign, abs(metal), azero, age, esign,
                                      abs(alpha), nasign, na)
 
+class Miles():
+    """ Class to handle data from the MILES SSP models that are distributed
+    with pPXF.  """
+    def __init__(self):
+        # Reading templates
+        ppxf_dir = os.path.dirname(os.path.realpath(ppxf.__file__))
+        self.miles_dir = os.path.join(ppxf_dir, "miles_models")
+        miles_files = [_ for _ in os.listdir(self.miles_dir) if
+                       _.endswith(".fits")]
+        self.Zs = np.unique([float(_.split("Z")[1].split("T")[0].replace(
+                        "m", "-").replace("p", "+")) for _ in
+                        miles_files])
+        self.Ts = np.unique([float(_.split("T")[1].split("_")[0]) for _ in
+                        miles_files])
+
+    def get_filename(self, metal, age):
+        """ Returns the name of files for the EMILES library. """
+        msign = "p" if metal >= 0. else "m"
+        azero = "0" if age < 10. else ""
+        filename = "Mun1.30Z{0}{1:.2f}T{2}{3:02.4f}_iPp0.00_baseFe_linear" \
+                   "_FWHM_2.51.fits".format(msign, abs(metal), azero, age)
+        return os.path.join(self.miles_dir, filename)
+
 def trim_templates(emiles, w1=4500, w2=10000, redo=False):
     """ Slice spectra from templates according to wavelength range. """
     newpath = os.path.join(context.home, "models/EMILES_BASTI_w{}_{}".format(
                            w1, w2))
     if not os.path.exists(newpath):
         os.mkdir(newpath)
-    for args in product(emiles.values.exponents, emiles.values.ZH,
+    total = len(emiles.values.exponents) * len(emiles.values.ZH) * \
+            len(emiles.values.age) * len(emiles.values.alphaFe) * \
+            len(emiles.values.NaFe)
+    for args in tqdm(product(emiles.values.exponents, emiles.values.ZH,
                         emiles.values.age, emiles.values.alphaFe,
-                        emiles.values.NaFe):
+                        emiles.values.NaFe), desc="Trimming data", total=total):
         filename = os.path.join(emiles.path, emiles.get_filename(*args))
         newfilename = os.path.join(newpath, emiles.get_filename(*args))
         if os.path.exists(newfilename):
@@ -116,7 +142,6 @@ def trim_templates(emiles, w1=4500, w2=10000, redo=False):
         tab = Table([wave[idx] * u.AA, flux[idx] * u.adu],
                     names=["wave", "flux"])
         tab.write(newfilename, format="fits")
-        print("Created file ", newfilename)
     return
 
 def prepare_templates_emiles_muse(w1, w2, velscale, sample="all", redo=False,
@@ -204,12 +229,9 @@ def prepare_templates_emiles_muse(w1, w2, velscale, sample="all", redo=False,
     print(output)
     return
 
-def prepare_muse(sample="bsf"):
-    w1 = 4500
-    w2 = 10000
-    velscale = 50  # km / s
+def prepare_muse(sample="test", w1=4500, w2=10000, fwhm=2.95, velscale=50):
     starttime = datetime.now()
-    prepare_templates_emiles_muse(w1, w2, velscale, sample=sample, fwhm=2.95,
+    prepare_templates_emiles_muse(w1, w2, velscale, sample=sample, fwhm=fwhm,
                                   redo=True)
     endtime = datetime.now()
     print("The program took {} to run".format(endtime - starttime))
@@ -226,7 +248,7 @@ def prepare_wifis():
 
 
 if __name__ == "__main__":
-    prepare_muse(sample="test")
+    prepare_muse(sample="test", w1=4500, w2=9400, velscale=200)
     # prepare_wifis()
 
 
