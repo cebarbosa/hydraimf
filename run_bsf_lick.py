@@ -21,7 +21,7 @@ import seaborn as sns
 from tqdm import tqdm
 
 import context
-import bsf
+import bsf_old
 
 class Spindex():
     """ Linearly interpolated line-strength indices."""
@@ -34,6 +34,9 @@ class Spindex():
         # Interpolating models
         pdata = np.array([temptable[col].data for col in parnames]).T
         tdata =  np.array([temptable[col].data for col in indnames]).T
+        print(pdata.shape)
+        print(tdata.shape)
+        input(404)
         nodes = []
         for param in parnames:
             x = np.unique(temptable[param]).data
@@ -106,8 +109,8 @@ def build_model(lick, lickerr, spindex, loglike="studt"):
             s = pm.Deterministic("S", 1. + pm.math.exp(x))
             theta.append(s)
         theta = tt.as_tensor_variable(theta).T
-        logl = bsf.LogLike(lick, spindex.indnames, lickerr, spindex,
-                           loglike=loglike)
+        logl = bsf_old.LogLike(lick, spindex.indnames, lickerr, spindex,
+                               loglike=loglike)
         pm.DensityDist('loglike', lambda v: logl(v),
                        observed={'v': theta})
 
@@ -227,7 +230,7 @@ def plot_fitting(lick, lickerr, spindex, traces, outfig, binnum,
     percs = np.linspace(5, 85, 9)
     fracs = np.array([0.2, 0.4, 0.6, 0.8, 1, 0.8, 0.6, 0.4, 0.2])
     colors = [cm.get_cmap("Oranges")(f) for f in fracs]
-    Ia = np.zeros((len(traces), spindex.nindices))
+    Ia = np.zeros((len(traces), spindex._n))
     from tqdm import tqdm
     for i in tqdm(range(len(traces)), desc="Loading indices for plots and "
                                            "table..."):
