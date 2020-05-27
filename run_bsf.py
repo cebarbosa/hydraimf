@@ -16,13 +16,12 @@ from astropy.io import fits
 from astropy.table import Table, hstack
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import pymc3 as pm
 import ppxf_util as util
-import theano.tensor as tt
 from spectres import spectres
 import scipy.optimize as opt
 import emcee
 from tqdm import tqdm
+import multiprocessing as mp
 
 import context
 import bsf
@@ -98,75 +97,6 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     sed.porder = porder
     sed.ssppars = params.colnames
     return sed
-
-def build_pymc3_model(flux, sed, loglike=None, fluxerr=None):
-    loglike = "normal" if loglike is None else loglike
-    model = pm.Model()
-    flux = flux.astype(np.float)
-    fluxerr = np.ones_like(flux) if fluxerr is None else fluxerr
-    ssp_testvals = {"imf": 1.85, "Z": 0.07, "T": 10.25, "alphaFe":0.15, "NaFe":
-        0.22} # Reasonable values avoiding nodes
-    with model:
-        theta = []
-        # Stellar population parameters
-        for param in ["imf", "Z", "T", "alphaFe", "NaFe"]:
-            vmin, vmax = sed.limits[param]
-            v = pm.Uniform(param, lower=vmin, upper=vmax,
-                           testval=ssp_testvals[param])
-            theta.append(v)
-        # Dust attenuation parameters
-        Av = pm.Exponential("Av", lam=1 / 0.4, testval=0.1)
-        theta.append(Av)
-        BNormal = pm.Bound(pm.Normal, lower=0)
-        Rv = BNormal("Rv", mu=3.1, sd=1., testval=3.1)
-        theta.append(Rv)
-        # Stellar kinematics
-        BoundedNormal = pm.Bound(pm.Normal, lower=3500, upper=4200)
-        V = BoundedNormal("V", mu=3800., sigma=100., testval=3810.)
-        theta.append(V)
-        BoundedHalfNormal = pm.Bound(pm.HalfNormal, lower=100, upper=500)
-        sigma = BoundedHalfNormal("sigma", sd=100., testval=190.)
-        theta.append(sigma)
-        # Emission lines
-        for em in sed.em_names:
-            v = pm.HalfNormal(em, sigma=1, testval=0.5)
-            theta.append(v)
-        Vgas = BoundedNormal("V_gas", mu=3800., sigma=100.)
-        theta.append(Vgas)
-        sigma_gas = pm.Uniform("sigma_gas", lower=50, upper=100)
-        theta.append(sigma_gas)
-        # Polynomial continuum
-        p0 = pm.Normal("p0", mu=1., sd=0.5, testval=1.)
-        theta.append(p0)
-        for n in range(sed.porder):
-            pn = pm.Normal("p{}".format(n+1), mu=0., sd=.05, testval=0.)
-            theta.append(pn)
-        if loglike == "studt":
-            nu = pm.Uniform("nu", lower=2.01, upper=50, testval=10.)
-            theta.append(nu)
-        if loglike == "normal2":
-            x = pm.Normal("x", mu=0, sd=1)
-            s = pm.Deterministic("S", 1. + pm.math.exp(x))
-            theta.append(s)
-        theta = tt.as_tensor_variable(theta).T
-        logl = bsf.TheanoLogLikeInterface(flux, sed, loglike=loglike,
-                                          obserr=fluxerr)
-        pm.DensityDist('loglike', lambda v: logl(v),
-                       observed={'v': theta})
-    return model
-
-def run_model_nuts(model, db, draws=1000, redo=False):
-    summary = "{}.csv".format(db)
-    if os.path.exists(summary) and not redo:
-        with model:
-            trace = pm.load_trace(db)
-        return trace
-    with model:
-        trace = pm.sample(draws, tune=draws, step=pm.Metropolis())
-        df = pm.stats.summary(trace)
-        df.to_csv(summary)
-    pm.save_trace(trace, db, overwrite=True)
-    return trace
 
 class Uniform():
     def __init__(self, xmin, xmax):
@@ -273,40 +203,41 @@ def run_MAP(flam, flamerr, sed, outprefix, redo=False):
     tpars.write(output, overwrite=True)
     return sol.x
 
-def run_emcee(flam, flamerr, sed, p0, dbname, draws=1000, redo=False):
+def run_emcee(flam, flamerr, sed, p0, dbname, max_n=10000, redo=False):
     if os.path.exists(dbname) and not redo:
         return
+    os.environ["OMP_NUM_THREADS"] = "1"
     backend = emcee.backends.HDFBackend(dbname)
     loglike = Loglike(flam, sed, obserr=flamerr)
     pos = p0 + 1e-4 * np.random.randn(2 * len(p0), len(p0))
     nwalkers, ndim = pos.shape
     backend.reset(nwalkers, ndim)
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike,
-                                    backend=backend)
-    max_n = 10000
-    # We'll track how the average autocorrelation time estimate changes
-    index = 0
-    autocorr = np.empty(max_n)
-    # This will be useful to testing convergence
-    old_tau = np.inf
-    # Now we'll sample for up to max_n steps
-    for sample in sampler.sample(pos, iterations=max_n, progress=True):
-        # Only check convergence every 100 steps
-        if sampler.iteration % 100:
-            continue
-        # Compute the autocorrelation time so far
-        # Using tol=0 means that we'll always get an estimate even
-        # if it isn't trustworthy
-        tau = sampler.get_autocorr_time(tol=0)
-        autocorr[index] = np.mean(tau)
-        index += 1
-        # Check convergence
-        converged = np.all(tau * 100 < sampler.iteration)
-        converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
-        if converged:
-            break
-        old_tau = tau
-    sampler.run_mcmc(pos, draws, progress=True)
+    ncpu = mp.cpu_count()
+    with mp.Pool(ncpu-2) as pool:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, loglike,
+                                        backend=backend)
+        # We'll track how the average autocorrelation time estimate changes
+        index = 0
+        autocorr = np.empty(max_n)
+        # This will be useful to testing convergence
+        old_tau = np.inf
+        # Now we'll sample for up to max_n steps
+        for sample in sampler.sample(pos, iterations=max_n, progress=True):
+            # Only check convergence every 100 steps
+            if sampler.iteration % 100:
+                continue
+            # Compute the autocorrelation time so far
+            # Using tol=0 means that we'll always get an estimate even
+            # if it isn't trustworthy
+            tau = sampler.get_autocorr_time(tol=0)
+            autocorr[index] = np.mean(tau)
+            index += 1
+            # Check convergence
+            converged = np.all(tau * 100 < sampler.iteration)
+            converged &= np.all(np.abs(old_tau - tau) / tau < 0.01)
+            if converged:
+                break
+            old_tau = tau
     return
 
 def plot_fitting(wave, flux, fluxerr, sed, trace, outfig, redo=True):
@@ -325,8 +256,6 @@ def plot_fitting(wave, flux, fluxerr, sed, trace, outfig, redo=True):
         llike[i] = loglike(traces[i])
     plt.plot(llike)
     plt.show()
-
-
     x = np.median(spec, axis=0)
     fig = plt.figure(figsize=(context.fig_width, 3.5))
     ax = plt.subplot(211)
@@ -347,8 +276,7 @@ def plot_fitting(wave, flux, fluxerr, sed, trace, outfig, redo=True):
     plt.show()
     return
 
-def run_ngc3311(targetSN=250, velscale=200, doMCMC=False, doEMCEE=True,
-                ltype=None, sample=None, draws=1000):
+def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None):
     """ Run BSF full spectrum fitting. """
     ltype = "normal2" if ltype is None else ltype
     sample = "all" if sample is None else sample
@@ -374,6 +302,7 @@ def run_ngc3311(targetSN=250, velscale=200, doMCMC=False, doEMCEE=True,
             os.mkdir(mdir)
         mdirs[method] = mdir
     for specname in specnames:
+        print("Processing spectrum {}".format(specname))
         name = specname.split(".")[0]
         data = Table.read(os.path.join(wdir, specname))
         wlin = data["wave"].data
@@ -388,26 +317,15 @@ def run_ngc3311(targetSN=250, velscale=200, doMCMC=False, doEMCEE=True,
         p0 = run_MAP(flam, flamerr, sed, outprefix)
         if ltype == "normal2":
             p0 = np.hstack([p0, np.array([0])])
-        if doMCMC:
-            dbname = os.path.join(mdirs["MCMC"], name)
-            model = build_pymc3_model(flam, sed, fluxerr=flamerr)
-            trace = run_model_nuts(model, dbname)
-            plot_fitting(wave, flam, flamerr, sed, trace, dbname)
-        if doEMCEE:
-            dbname = os.path.join(mdirs["EMCEE"], "{}.h5".format(name))
-            run_emcee(flam, flamerr, sed, p0, dbname, draws=draws, redo=False)
-            reader = emcee.backends.HDFBackend(dbname)
-            samples = reader.get_chain(flat=True)
-            pfit = np.median(samples, axis=0)
-            plt.plot(wave, flam)
-            plt.plot(wave, sed(pfit[:-1]))
-            plt.show()
-            input()
-
-
-        input(404)
-
-
+        dbname = os.path.join(mdirs["EMCEE"], "{}.h5".format(name))
+        run_emcee(flam, flamerr, sed, p0, dbname, redo=False)
+        # reader = emcee.backends.HDFBackend(dbname)
+        # samples = reader.get_chain(flat=True)
+        # pfit = np.median(samples, axis=0)
+        # plt.plot(wave, flam)
+        # plt.plot(wave, sed(pfit[:-1]))
+        # plt.show()
+        # input()
 
 if __name__ == "__main__":
-    run_ngc3311(sample="test", draws=100)
+    run_ngc3311()
