@@ -20,7 +20,7 @@ from spectres import spectres
 from tqdm import tqdm
 
 import context
-from basket.lick.lick import Lick
+from lick import Lick
 
 import context
 
@@ -139,6 +139,26 @@ def run_lick_templates(w1, w2, sigma, velscale=None, licktype=None,
     newdata = gaussian_filter1d(data, sigma / velscale, axis=1, mode="constant",
                                          cval=0.0)
     ts = []
+    lick = Lick(bandsz0, units=units)
+    R, Ia, Im = lick(wave, newdata)
+    print(np.max(Ia, axis=0))
+    print(Ia[-1])
+    import matplotlib.pyplot as plt
+    plt.hist(Ia[:, -1])
+    plt.show()
+    fig = plt.figure()
+    for i, w in enumerate(bandsz0):
+        idx = np.where((wave >= w[0]) & (wave <= w[5]))
+        ax = plt.subplot(8, 4, i+1)
+        plt.plot(wave[idx], newdata[-1][idx])
+        ax.axvspan(w[0].value, w[1].value, alpha=.3, color="b")
+        ax.axvspan(w[2].value, w[3].value, alpha=.3, color="g")
+        ax.axvspan(w[4].value, w[5].value, alpha=.3, color="r")
+        ax.set_ylim()
+    plt.show()
+    print(names)
+    print(np.max(Ia, axis=1))
+    input()
     for param, spec in tqdm(zip(params, newdata), total=len(params)):
         lick = Lick(wave, spec, bandsz0, vel=0 * u.km / u.s,
                         units=units)
@@ -153,7 +173,7 @@ def run_ngc3311():
     w1 = 4500
     w2 = 10000
     sigma= 315
-    run_lick(w1, w2, targetSN, nsim=200, sigma=sigma, redo=True)
+    # run_lick(w1, w2, targetSN, nsim=200, sigma=sigma, redo=True)
     run_lick_templates(w1, w2, sigma, redo=True, sample="test")
 
 def run_m87(targetSN=500, velscale=None, sigma=410, nsim=200, w1=4500,
