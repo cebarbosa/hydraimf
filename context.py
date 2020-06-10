@@ -74,6 +74,8 @@ if platform.node() == "kadu-Inspiron-5557":
     home = "/home/kadu/Dropbox/hydraimf"
 elif platform.node() in ["uv100", "alphacrucis"]:
     home = "/sto/home/cebarbosa/hydraimf"
+elif platform.node() in ["t80s-jype2", "t80s-jype"]:
+    home = "/mnt/public/kadu/hydraimf"
 
 data_dir = os.path.join(home, "data")
 
