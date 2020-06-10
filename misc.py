@@ -13,7 +13,7 @@ from astropy.io import fits
 
 def array_from_header(filename, axis=3, extension=1):
     """ Produces array for wavelenght of a given array. """
-    h = fits.getheader(filename, extension=extension)
+    h = fits.getheader(filename, ext=extension)
     w0 = h["CRVAL{0}".format(axis)]
     dwkeys = ["CD{0}_{0}".format(axis), "CDELT{0}".format(axis)]
     for key in dwkeys:
@@ -23,7 +23,6 @@ def array_from_header(filename, axis=3, extension=1):
     deltaw = h[dwkey]
     pix0 = h["CRPIX{0}".format(axis)]
     npix = h["NAXIS{0}".format(axis)]
-    w = w0 + deltaw * (np.arange(npix) + 1 - pix0)
     return w0 + deltaw * (np.arange(npix) + 1 - pix0)
 
 def snr(flux, axis=0):
