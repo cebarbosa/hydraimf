@@ -75,6 +75,15 @@ def run_ppxf(specs, templates_file, outdir, velscale=None, redo=False,
         components = np.hstack((np.zeros(nssps), np.ones(ngas))).astype(np.int)
         gas_component = components > 0
         ########################################################################
+        # # Masking bad pixels
+        # skylines = np.array([4785, 5577, 5889, 6300, 6863])
+        # goodpixels = np.arange(len(wave))
+        # for line in skylines:
+        #     sky = np.argwhere((wave < line - 15) | (wave > line + 15)).ravel()
+        #     goodpixels = np.intersect1d(goodpixels, sky)
+        # print(len(wave), len(goodpixels))
+        # input()
+        ###################################################################
         # Fitting with two components
         pp = ppxf.ppxf(templates, galaxy, noise, velscale=velscale,
                   plot=True, moments=[2,2], start=start, vsyst=dv,

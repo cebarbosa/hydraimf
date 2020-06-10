@@ -358,9 +358,9 @@ class SSP():
         thetamin = []
         thetamax = []
         for par in self.params.colnames:
-            thetamin.append(np.min(self.params[par].data))
-            thetamax.append(np.max(self.params[par].data))
-            inner_grid.append(np.unique(self.params[par].data)[1:-1])
+            thetamin.append(np.min(self.params[par].observed))
+            thetamax.append(np.max(self.params[par].observed))
+            inner_grid.append(np.unique(self.params[par].observed)[1:-1])
         self.thetamin = np.array(thetamin)
         self.thetamax = np.array(thetamax)
         self.inner_grid = inner_grid

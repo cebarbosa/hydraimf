@@ -158,7 +158,7 @@ def homogeneize_resolution_m87(res=2.95, targetSN=500, dataset="MUSE"):
 
 
 if __name__ == "__main__":
-    # plot_muse_fwhm()
+    plot_muse_fwhm()
     # plot_vel_resolution()
     # broad_binned(context.fields[:1], 2.95, targetSN=250, dataset="MUSE")
-    homogeneize_resolution_m87()
+    # homogeneize_resolution_m87()

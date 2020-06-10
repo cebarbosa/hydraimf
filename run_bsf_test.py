@@ -23,7 +23,7 @@ from numpy.polynomial import Legendre
 import pymc3 as pm
 import theano.tensor as tt
 import context
-import bsf
+import bsf_old
 
 class SpecModel():
     def __init__(self, wave, velscale=None, test=False, nssps=1, porder=5):
@@ -39,10 +39,10 @@ class SpecModel():
                                   int(self.velscale.value), tempfile_extension))
         templates = fits.getdata(templates_file, ext=0)
         table = Table.read(templates_file, hdu=1)
-        logwave = Table.read(templates_file, hdu=2)["loglam"].data
+        logwave = Table.read(templates_file, hdu=2)["loglam"].observed
         twave = np.exp(logwave) * u.angstrom
-        self.spec = bsf.SEDModel(twave, table, templates, nssps=nssps,
-                                 wave_out=self.wave, velscale=self.velscale)
+        self.spec = bsf_old.SEDModel(twave, table, templates, nssps=nssps,
+                                     wave_out=self.wave, velscale=self.velscale)
         self.parnames = [_.split("_")[0] for _ in self.spec.parnames]
         # Making polynomial to slightly change continuum
         N = len(wave)
@@ -94,7 +94,6 @@ def run_bsf(fname, test=False, redo=False, outdir=None):
     # Building parametric model for fitting
     porder = 5
     sed = SpecModel(wave, test=test, porder=porder)
-    p0 = np.hstack([[0.1, 4., 1., 0., 5., 0, 360], np.ones(porder) * 0.01])
     # Estimating flux
     m0 = -2.5 * np.log10(np.median(flux) / np.median(sed.spec.templates))
     f0 = np.power(10, -0.4 * m0)
@@ -126,7 +125,7 @@ def run_bsf(fname, test=False, redo=False, outdir=None):
         nu = pm.Uniform("nu", lower=2.01, upper=50, testval=10.)
         theta.append(nu)
         theta = tt.as_tensor_variable(theta).T
-        logl = bsf.LogLike(flux, wave, fluxerr, sed, loglike="studt")
+        logl = bsf_old.LogLike(flux, wave, fluxerr, sed, loglike="studt")
         # use a DensityDist
         pm.DensityDist('loglike', lambda v: logl(v),
                        observed={'v': theta})
