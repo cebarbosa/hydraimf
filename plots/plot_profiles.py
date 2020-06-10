@@ -121,7 +121,7 @@ def plot_sigma_imf(t, figsize=(5,3)):
     ax.text(325, 1.375, "Kroupa")
     ax.text(325, 1.825, "Chabrier")
     ax.text(325, 2.375, "Salpeter")
-    plt.subplots_adjust(left=0.07, right=0.98, top=0.99, bottom=0.105,
+    plt.subplots_adjust(left=0.08, right=0.98, top=0.99, bottom=0.105,
                         hspace=0.06)
     cbar_pos = [0.14, 0.18, 0.18, 0.05]
     cbaxes = fig.add_axes(cbar_pos)
@@ -242,10 +242,10 @@ if __name__ == "__main__":
     # Loading and preparing data
     tfile = os.path.join(wdir, "results.fits")
     t = Table.read(tfile)
-    t["sigma_lerr"] = t["sigmaerr"]
-    t["sigma_uerr"] = t["sigmaerr"]
-    t["V_lerr"] = t["Verr"]
-    t["V_uerr"] = t["Verr"]
+    # t["sigma_lerr"] = t["sigmaerr"]
+    # t["sigma_uerr"] = t["sigmaerr"]
+    # t["V_lerr"] = t["Verr"]
+    # t["V_uerr"] = t["Verr"]
     t["R_uerr"] = 0
     t["R_lerr"] = 0
     ############################################################################
