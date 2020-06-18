@@ -199,11 +199,11 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
         geom.write(geomtab, overwrite=True)
         # ppxftable = os.path.join(wdir, "ppxf_vel50_w4500_10000_kinematics.fits")
         # results = Table.read(ppxftable)
-        sn_table = Table.read(os.path.join(wdir, "measured_sn.fits"))
+        sn_table = Table.read(os.path.join(wdir, "measured_sn_optical.fits"))
         results = hstack([geom, sn_table])
         results.rename_column("SN/Ang", "SNRperAng")
         # Adding stellar population table
-        mcmc_dir = os.path.join(wdir, "MCMC")
+        mcmc_dir = os.path.join(wdir, "EMCEE")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
                 "results.fits")])
         stpop = [Table.read(os.path.join(mcmc_dir, _ )) for _ in tables]
@@ -219,10 +219,12 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
     labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
               "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$"]
     cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f"]
+    lims = [[None, None], [-.1, 0.2], [6, 14], [None, None],
+            [0.05, 0.25], [0.25, 0.6], [0, 0.05]]
     xloc = [-4, -4.5, -4, -5., -4.5, -4.5, -4.5]
     cmaps = ["viridis"] * len(xloc)
     pvm = PlotVoronoiMaps([results], fields, outdir,
-                          targetSN=targetSN, fields=["fieldA"],
+                          targetSN=targetSN, fields=["fieldA"], lims=lims,
                           labels=labels, cb_fmts=cb_fmts, cmaps=cmaps)
 
     xylims = [[10.1, -10.1], [-12, 9]]
@@ -304,5 +306,5 @@ def make_triptychs(targetSN=250, dataset="MUSE"):
 
 
 if __name__ == "__main__":
-    make_maps(targetSN=250)
+    make_maps(targetSN=250, update=True)
     # make_triptychs()
