@@ -212,6 +212,7 @@ def make_pymc3_model(flux, sed, loglike=None, fluxerr=None):
                                           obserr=fluxerr)
         pm.DensityDist('loglike', lambda v: logl(v),
                        observed={'v': theta})
+
     return model
 
 def run_mcmc(model, db, redo=False, method=None):
@@ -225,8 +226,8 @@ def run_mcmc(model, db, redo=False, method=None):
         elif method == "NUTS":
             trace = pm.sample()
         elif method == "SMC":
-                trace = pm.sample_smc(draws=250, threshold=0.3,
-                                      progressbar=True)
+            trace = pm.sample_smc(draws=250, threshold=0.3,
+                                      progressbar=True )
         df = pm.stats.summary(trace)
         df.to_csv(summary)
     pm.save_trace(trace, db, overwrite=True)
@@ -288,7 +289,7 @@ def run_emcee(flam, flamerr, sed, db, loglike="normal2"):
     backend.reset(nwalkers, ndim)
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability,
                                     backend=backend)
-    sampler.run_mcmc(pos, 500, progress=True)
+    sampler.run_mcmc(pos, 1000, progress=True)
     return
 
 def weighted_traces(trace, sed, weights, outtab, redo=False):
@@ -397,7 +398,6 @@ def plot_corner(trace, outroot, title=None, redo=False):
     output = "{}_corner.png".format(outroot)
     if os.path.exists(output) and not redo:
         return
-    input("hi")
     labels = {"imf": r"$\Gamma_b$", "Z": "[Z/H]", "T": "Age (Gyr)",
               "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
     N = len(trace.colnames)
@@ -539,35 +539,30 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
             run_emcee(flam, flamerr, sed, emcee_db)
         reader = emcee.backends.HDFBackend(emcee_db)
         samples = reader.get_chain(discard=100, flat=True, thin=50)
-        traces = samples[:, :len(sed.parnames)]
-        # # Testing Sequential Monte Carlos
-        # smc_db = os.path.join(smc_dir, name)
-        # if not os.path.exists(smc_db):
-        #     print("Compiling pymc3 model for SMC model...")
-        #     model = make_pymc3_model(flam, sed, fluxerr=flamerr,
-        #                              loglike=ltype)
-        #     run_mcmc(model, smc_db, redo=False, method="SMC")
-        # smc_traces = load_traces(smc_db, sed.parnames)
-        # compare_traces(flam, flamerr, sed, traces, smc_traces)
-        # Processing the results
-        if nssps > 1:
-            outtab = "{}_weighted_pars.fits".format(emcee_db)
-            ptrace = weighted_traces(traces, sed, mw, outtab, redo=False)
-        else:
-            colnames = sed.sspcolnames + ["Av", "V", "sigma"]
-            idx = [sed.parnames.index(p) for p in colnames]
-            ptrace = Table(traces[:, idx], names=colnames)
+        emcee_traces = samples[:, :len(sed.parnames)]
+        idx = [sed.parnames.index(p) for p in sed.sspcolnames]
+        ptrace_emcee = Table(emcee_traces[:, idx], names=sed.sspcolnames)
+        ########################################################################
+        # Testing Sequential Monte Carlo
+        smc_db = os.path.join(smc_dir, name)
+        if not os.path.exists(smc_db):
+            print("Compiling pymc3 model for SMC model...")
+            model = make_pymc3_model(flam, sed, fluxerr=flamerr,
+                                     loglike=ltype)
+            run_mcmc(model, smc_db, redo=False, method="SMC")
+        smc_traces = load_traces(smc_db, sed.parnames)
+        ptrace_smc = Table(smc_traces[:, idx], names=sed.sspcolnames)
+        ########################################################################
         print("Producing corner plots...")
         title = "Spectrum {}".format(binnum)
-        if sample == "test":
-            ptrace = ptrace[-100:]
-            traces = traces[-100:]
-        plot_corner(ptrace, emcee_db, title=title, redo=redo)
+        plot_corner(ptrace_emcee, emcee_db, title=title, redo=redo)
+        plot_corner(ptrace_smc, smc_db, title=title, redo=redo)
         print("Producing fitting figure...")
-        plot_fitting(wave, flam, flamerr, sed, traces, emcee_db, redo=redo)
+        plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db, redo=redo)
+        plot_fitting(wave, flam, flamerr, sed, smc_traces, smc_db, redo=redo)
         print("Making summary table...")
         outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
-        make_table(ptrace, binnum, outtab)
+        make_table(ptrace_emcee, binnum, outtab)
 
 if __name__ == "__main__":
-    run_ngc3311(sample="all")
+    run_ngc3311(sample="test")
