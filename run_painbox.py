@@ -26,6 +26,7 @@ import theano.tensor as tt
 from tqdm import tqdm
 import seaborn as sns
 import emcee
+from scipy import stats
 
 import context
 from paintbox import paintbox as pb
@@ -239,16 +240,11 @@ def run_emcee(flam, flamerr, sed, db, loglike="normal2"):
         pnames.append("S")
     if loglike == "studt":
         pnames.append("nu")
-    mcmc_db = db.replace("EMCEE", "MCMC").replace(".h5", "")
-    trace = load_traces(mcmc_db, pnames)
     ndim = len(pnames)
     nwalkers = 2 * ndim
-    limits = np.zeros((ndim, 2))
-    mus = np.mean(trace, axis=0)
-    sds = np.std(trace, axis=0)
-    perc1 = np.percentile(trace, 1, axis=0)
-    perc99 = np.percentile(trace, 99, axis=0)
+    polynames = ["p{}".format(i+1) for i in range(sed.porder)]
     pos = np.zeros((nwalkers, ndim))
+    priors = []
     for i, param in enumerate(pnames):
         if len(param.split("_")) == 2:
             pname, n = param.split("_")
@@ -259,29 +255,39 @@ def run_emcee(flam, flamerr, sed, db, loglike="normal2"):
         ########################################################################
         # Stellar population parameters
         if pname in sed.ssppars:
-            limits[i] = sed.ssppars[pname]
-            pos[:,i] = np.clip(np.random.normal(mus[i], sds[i], nwalkers),
-                               *limits[i])
-        # Emission lines
-        elif pname in sed.line_names:
-            limits[i] = [mus[i] - 3 * sds[i], mus[i] + 3 * sds[i]]
-            pos[:,i] = np.random.normal(mus[i], sds[i], nwalkers)
-        # All other parameters
+            vmin, vmax = sed.ssppars[pname]
+            prior = stats.uniform(vmin, vmax - vmin)
+        elif param == "Av":
+            prior = stats.expon(0, 0.4)
+        elif param== "Rv":
+            vmin = 0
+            vmax = np.infty
+            mu = 3.1
+            sd = 1.
+            a, b = (vmin - mu) / sd, (vmax - mu) / sd
+            prior = stats.truncnorm(a, b, mu, sd)
+        elif param in ["V", "V_gas"]:
+            prior = stats.norm(3800, 100)
+        elif param == "sigma":
+            prior = stats.uniform(100, 400)
+        elif param == "sigma_gas":
+            prior = stats.uniform(60, 60)
+        elif param in sed.line_names:
+            prior = stats.halfnorm(0, 1)
+        elif param == "p0":
+            prior = stats.norm(1, 0.1)
+        elif param in polynames:
+            prior = stats.norm(0, 0.02)
+        elif param == "S":
+            prior = stats.lognorm(1, 1)
         else:
-            limits[i] = [perc1[i], perc99[i]]
-            pos[:,i] = np.random.uniform(perc1[i], perc99[i], nwalkers)
+            raise("Error: parameter not known: {}".format(param))
+        priors.append(prior.logpdf)
+        pos[:, i] = prior.rvs(nwalkers)
     if loglike == "normal2":
         log_likelihood = pb.Normal2LogLike(flam, sed, obserr=flamerr)
-    elif loglike == "studT":
-        pass
-    elif loglike == "normal":
-        pass
-    def log_prior(theta):
-        if np.any(theta < limits[:,0]) or np.any(theta > limits[:,1]):
-            return -np.infty
-        return 0
     def log_probability(theta):
-        lp = log_prior(theta)
+        lp = np.sum([prior(val) for prior, val in zip(priors, theta)])
         if not np.isfinite(lp):
             return -np.inf
         return lp + log_likelihood(theta)
@@ -289,7 +295,7 @@ def run_emcee(flam, flamerr, sed, db, loglike="normal2"):
     backend.reset(nwalkers, ndim)
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability,
                                     backend=backend)
-    sampler.run_mcmc(pos, 1000, progress=True)
+    sampler.run_mcmc(pos, 500, progress=True)
     return
 
 def weighted_traces(trace, sed, weights, outtab, redo=False):
@@ -544,25 +550,25 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         ptrace_emcee = Table(emcee_traces[:, idx], names=sed.sspcolnames)
         ########################################################################
         # Testing Sequential Monte Carlo
-        smc_db = os.path.join(smc_dir, name)
-        if not os.path.exists(smc_db):
-            print("Compiling pymc3 model for SMC model...")
-            model = make_pymc3_model(flam, sed, fluxerr=flamerr,
-                                     loglike=ltype)
-            run_mcmc(model, smc_db, redo=False, method="SMC")
-        smc_traces = load_traces(smc_db, sed.parnames)
-        ptrace_smc = Table(smc_traces[:, idx], names=sed.sspcolnames)
+        # smc_db = os.path.join(smc_dir, name)
+        # if not os.path.exists(smc_db):
+        #     print("Compiling pymc3 model for SMC model...")
+        #     model = make_pymc3_model(flam, sed, fluxerr=flamerr,
+        #                              loglike=ltype)
+        #     run_mcmc(model, smc_db, redo=False, method="SMC")
+        # smc_traces = load_traces(smc_db, sed.parnames)
+        # ptrace_smc = Table(smc_traces[:, idx], names=sed.sspcolnames)
+        # plot_corner(ptrace_smc, smc_db, title=title, redo=redo)
+        # plot_fitting(wave, flam, flamerr, sed, smc_traces, smc_db, redo=redo)
         ########################################################################
         print("Producing corner plots...")
         title = "Spectrum {}".format(binnum)
         plot_corner(ptrace_emcee, emcee_db, title=title, redo=redo)
-        plot_corner(ptrace_smc, smc_db, title=title, redo=redo)
         print("Producing fitting figure...")
         plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db, redo=redo)
-        plot_fitting(wave, flam, flamerr, sed, smc_traces, smc_db, redo=redo)
         print("Making summary table...")
         outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
         make_table(ptrace_emcee, binnum, outtab)
 
 if __name__ == "__main__":
-    run_ngc3311(sample="test")
+    run_ngc3311(sample="all")
