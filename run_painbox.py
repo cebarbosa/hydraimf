@@ -12,6 +12,12 @@ import os
 import copy
 import re
 
+os.environ["OMP_NUM_THREADS"] = "2" # export OMP_NUM_THREADS=4
+os.environ["OPENBLAS_NUM_THREADS"] = "2" # export OPENBLAS_NUM_THREADS=4
+os.environ["MKL_NUM_THREADS"] = "2" # export MKL_NUM_THREADS=6
+os.environ["VECLIB_MAXIMUM_THREADS"] = "2" # export VECLIB_MAXIMUM_THREADS=4
+os.environ["NUMEXPR_NUM_THREADS"] = "2" # export NUMEXPR_NUM_THREADS=6
+
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
@@ -103,7 +109,7 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     sed.line_names = line_names
     sed.porder = porder
     sed.nssps = nssps
-    return sed, norm
+    return sed, norm, sky
 
 def make_p0(sed):
     """ Produces an initial guess for the model. """
@@ -188,7 +194,7 @@ def make_pymc3_model(flux, sed, loglike=None, fluxerr=None):
                 theta.append(Rv)
             elif param == "V":
                 # Stellar kinematics
-                V = pm.Normal("V", mu=3800., sigma=50., testval=3805.)
+                V = pm.Normal("V", mu=3800., sd=50., testval=3805.)
                 theta.append(V)
             elif param == "sigma":
                 sigma = pm.Uniform(param, lower=100, upper=500, testval=185.)
@@ -236,7 +242,7 @@ def run_mcmc(model, db, redo=False, method=None):
         return
     with model:
         if method == "MCMC":
-            trace = pm.sample(250, tune=250, step=pm.Metropolis())
+            trace = pm.sample(draws=300, tune=300, step=pm.Metropolis())
         elif method == "NUTS":
             trace = pm.sample()
         elif method == "SMC":
@@ -288,7 +294,7 @@ def run_emcee(flam, flamerr, sed, db, loglike="normal2"):
     backend.reset(nwalkers, ndim)
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability,
                                     backend=backend)
-    sampler.run_mcmc(pos, 500, progress=True)
+    sampler.run_mcmc(pos, 1000, progress=True)
     return
 
 def weighted_traces(trace, sed, weights, outtab, redo=False):
@@ -331,7 +337,7 @@ def make_table(trace, binnum, outtab):
     tab.write(outtab, overwrite=True)
     return tab
 
-def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True):
+def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None):
     outfig = "{}_fitting".format(db.replace(".h5", ""))
     specnum = os.path.split(db)[1].replace(".h5", "").split("_")[-1]
     if os.path.exists("{}.png".format(outfig)) and not redo:
@@ -346,6 +352,12 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True):
                                            "table..."):
         spec[i] = sed(traces[i])
         llike[i] = loglike(traces[i])
+    skyspec = np.zeros((len(traces), len(wave)))
+    if sky is not None:
+        idx = [i for i,p in enumerate(sed.parnames) if p.startswith("sky")]
+        skytrace = traces[:, idx]
+        for i in tqdm(range(len(skytrace)), desc="Loading sky models"):
+            skyspec[i] = sky(skytrace[i])
     fig = plt.figure()
     plt.plot(llike)
     plt.savefig("{}_loglike.png".format(db))
@@ -361,34 +373,44 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True):
         s = "{}=${:.2f}^{{+{:.2f}}}_{{-{:.2f}}}$".format(sspdict[param], m,
                                                        uperr, lowerr)
         summary.append(s)
+    lw=1
     y = np.median(spec, axis=0)
+    skymed = np.median(skyspec, axis=0)
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [2, 1]},
                             figsize=(2 * context.fig_width, 3))
     ax = plt.subplot(axs[0])
-    ax.errorbar(wave, flux, yerr=fluxerr, fmt="-", mec="w", mew=0.4,
-                elinewidth=0.8, label="Spectrum {}".format(specnum))
-    for c, per in zip(colors, percs):
-        ax.fill_between(wave, np.percentile(spec, per, axis=0),
-                         np.percentile(spec, per + 10, axis=0), color=c)
-    ax.errorbar(wave, y, fmt="-", mec="w", mew=0.4,
-                elinewidth=0.8, label="Model")
+    ax.plot(wave, flux, "-", c="0.8", lw=lw)
+    ax.plot(wave, flux - skymed, "-", label="Spectrum {}".format(specnum),
+            lw=lw)
+    ax.plot(wave, y - skymed, "-", lw=lw, label="Model")
+    # for c, per in zip(colors, percs):
+    #     ax.fill_between(wave, np.percentile(spec, per, axis=0) - skymed,
+    #                      np.percentile(spec, per + 10, axis=0) - skymed,
+    #                     color=c)
+    # ax.errorbar(wave, y - skymed, fmt="-", mec="w", mew=0.4,
+    #             elinewidth=0.5, label="Model")
 
     ax.set_ylabel("Normalized flux")
     ax.xaxis.set_ticklabels([])
     ax.text(0.03, 0.88, "   ".join(summary), transform=ax.transAxes, fontsize=6)
     plt.legend()
+    ax.set_xlim(4700, 9400)
     ax = plt.subplot(axs[1])
-    for c, per in zip(colors, percs):
-        ax.fill_between(wave, flux - np.percentile(spec, per, axis=0),
-                         flux - np.percentile(spec, per + 10, axis=0), \
-                              color=c)
-    ax.errorbar(wave, flux - y, fmt="-", mec="w", mew=0.4,
-                elinewidth=0.8, c="C1")
-    ax.axhline(y=0, ls="--", c="k", lw=0.8)
+    # for c, per in zip(colors, percs):
+    #     ax.fill_between(wave,
+    #                     100 * (flux - np.percentile(spec, per, axis=0)) / flux,
+    #                     100 * (flux - np.percentile(spec, per + 10, axis=0)) /
+    #                     flux, color=c)
+    rmse = np.std((flux - y)/flux)
+    ax.plot(wave, 100 * (flux - y) / flux, "-", lw=lw, c="C1",
+            label="RMSE={:.1f}\%".format(100 * rmse))
+    ax.axhline(y=0, ls="--", c="k", lw=1, zorder=1000)
     ax.set_xlabel(r"$\lambda$ (\r{A})")
-    ax.set_ylabel("Residue")
-    plt.subplots_adjust(left=0.08, right=0.99, hspace=0.02, top=0.953,
-                        bottom=0.095)
+    ax.set_ylabel("Residue (\%)")
+    ax.set_xlim(4700, 9400)
+    plt.legend()
+    plt.subplots_adjust(left=0.065, right=0.995, hspace=0.02, top=0.99,
+                        bottom=0.11)
     plt.savefig("{}.png".format(outfig), dpi=250)
     return
 
@@ -489,7 +511,7 @@ def compare_traces(flux, fluxerr, sed, t1, t2):
     return
 
 def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
-                redo=False, nssps=1, porder=30):
+                redo=False, nssps=1, porder=30, postprocessing=True):
     """ Run pb full spectrum fitting. """
     # os.environ["OMP_NUM_THREADS"] = "8"
     ltype = "normal2" if ltype is None else ltype
@@ -498,16 +520,13 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
     # Setting up directories
     imgname, cubename = context.get_field_files("fieldA")
     wdir = os.path.join(os.path.split(cubename)[0], "sn{}/sci".format(targetSN))
-    emcee_dir = os.path.join(os.path.split(wdir)[0], "EMCEE{}".format(nssps_str))
-    mcmc_dir = os.path.join(os.path.split(wdir)[0], "MCMC{}".format(nssps_str))
-    smc_dir =os.path.join(os.path.split(wdir)[0], "SMC{}".format(nssps_str))
-    dynesty_dir =os.path.join(os.path.split(wdir)[0], "dynesty{}".format(
+    emcee_dir = os.path.join(os.path.split(wdir)[0], "EMCEE{}".format(
         nssps_str))
-    for dir_ in [emcee_dir, mcmc_dir, smc_dir, dynesty_dir]:
+    mcmc_dir = os.path.join(os.path.split(wdir)[0], "MCMC{}".format(nssps_str))
+    for dir_ in [emcee_dir, mcmc_dir]:
         if not os.path.exists(dir_):
             os.mkdir(dir_)
-    specnames = [_ for _ in sorted(os.listdir(wdir)) if _.endswith(".fits")][
-                ::-1]
+    specnames = [_ for _ in sorted(os.listdir(wdir)) if _.endswith(".fits")]
     # Read first spectrum to set the dispersion
     data = Table.read(os.path.join(wdir, specnames[0]))
     wave_lin = data["wave"].data
@@ -516,7 +535,8 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
                                     velscale=velscale)
     wave = np.exp(logwave)[1:-1]
     print("Producing SED model...")
-    sed, mw = build_sed_model(wave, sample=sample, nssps=nssps, porder=porder)
+    sed, mw, sky = build_sed_model(wave, sample=sample, nssps=nssps,
+                                 porder=porder)
     # p0 = make_p0(sed)
     # plt.plot(wave, sed(p0))
     # plt.show()
@@ -545,39 +565,23 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
             print("Running EMCEE...")
             run_emcee(flam, flamerr, sed, emcee_db)
         reader = emcee.backends.HDFBackend(emcee_db)
-        samples = reader.get_chain(discard=100, flat=True, thin=50)
+        samples = reader.get_chain(discard=500, flat=True, thin=100)
         emcee_traces = samples[:, :len(sed.parnames)]
         idx = [sed.parnames.index(p) for p in sed.sspcolnames]
         ptrace_emcee = Table(emcee_traces[:, idx], names=sed.sspcolnames)
-        ########################################################################
-        # Testing Sequential Monte Carlo
-        if False:
-            smc_db = os.path.join(smc_dir, name)
-            if not os.path.exists(smc_db):
-                print("Compiling pymc3 model for SMC model...")
-                model = make_pymc3_model(flam, sed, fluxerr=flamerr,
-                                         loglike=ltype)
-                run_mcmc(model, smc_db, redo=False, method="SMC")
-            smc_traces = load_traces(smc_db, sed.parnames)
-            ptrace_smc = Table(smc_traces[:, idx], names=sed.sspcolnames)
-            plot_corner(ptrace_smc, smc_db, title=title, redo=redo)
-            plot_fitting(wave, flam, flamerr, sed, smc_traces, smc_db, redo=redo)
-        ########################################################################
-        # Testing Dynesty
-        if False:
-            dynesty_db = os.path.join(dynesty_dir, name)
-            if not os.path.exists(dynesty_db):
-                print("Running dynesty model...")
-                run_dynesty(flam, flamerr, sed, dynesty_db)
-        print("Producing corner plots...")
-        title = "Spectrum {}".format(binnum)
-        plot_corner(ptrace_emcee, emcee_db, title=title, redo=redo)
-        print("Producing fitting figure...")
-        plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db, redo=redo)
-        print("Making summary table...")
-        outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
-        make_table(ptrace_emcee, binnum, outtab)
-        break
+        if postprocessing:
+            print("Producing corner plots...")
+            title = "Spectrum {}".format(binnum)
+            plot_corner(ptrace_emcee, emcee_db, title=title, redo=redo)
+            print("Producing fitting figure...")
+            plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
+                         redo=False, sky=sky)
+            print("Making summary table...")
+            outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
+            summary_pars = sed.sspcolnames + ["Av", "V", "sigma"]
+            idx = [sed.parnames.index(p) for p in summary_pars]
+            summary_trace = Table(emcee_traces[:, idx], names=summary_pars)
+            make_table(summary_trace, binnum, outtab)
 
 if __name__ == "__main__":
-    run_ngc3311()
+    run_ngc3311(postprocessing=True)

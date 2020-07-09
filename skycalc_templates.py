@@ -92,20 +92,24 @@ def make_sky_templates():
     names.append("NaI")
     # Processing remaining lines
     idxs_used = np.unique(np.hstack(idxs_used))
-    mask = np.zeros(len(wave))
-    mask[~idxs_used] = 1
-    em_other = np.where(mask == 1, emission, 0)
-    dlams = [[6240, 6340], [6518, 6540], [7234, 7446], [7457, 7643],
-             [7770, 7865], [7900, 8200], [8274, 8556], [8734, 9070]]
-    groups = ["OH(9-4)", "OH(6-1)", "OH(8-3)", "OH(5-0)", "OH(9-4)", "OH(5-1)",
-             "OH(6-2)", "OH(7-3)"]
-    for dlam, group in zip(dlams, groups):
-        idx = np.where((wave <= dlam[1]) & (wave >= dlam[0]))[0]
+    add_other = True
+    if add_other:
         mask = np.zeros(len(wave))
-        mask[idx] = 1
-        em = np.where(mask==1, em_other, 0)
-        i = names.index(group)
-        templates[i] += em
+        mask[~idxs_used] = 1
+        em_other = np.where(mask == 1, emission, 0)
+        templates.append(em_other)
+        names.append("Other")
+        # dlams = [[6240, 6340], [6518, 6540], [7234, 7446], [7457, 7643],
+        #          [7770, 7865], [7900, 8200], [8274, 8556], [8734, 9070]]
+        # groups = ["OH(9-4)", "OH(6-1)", "OH(8-3)", "OH(5-0)", "OH(9-4)", "OH(5-1)",
+        #          "OH(6-2)", "OH(7-3)"]
+        # for dlam, group in zip(dlams, groups):
+        #     idx = np.where((wave <= dlam[1]) & (wave >= dlam[0]))[0]
+        #     mask = np.zeros(len(wave))
+        #     mask[idx] = 1
+        #     em = np.where(mask==1, em_other, 0)
+        #     i = names.index(group)
+        #     templates[i] += em
     # templates.append(em)
     # names.append("other")
     templates = np.array(templates)

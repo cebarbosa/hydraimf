@@ -230,7 +230,7 @@ def plot_sarzi(t, figsize=(7.24, 2.5)):
     plt.close()
 
 if __name__ == "__main__":
-    labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma$ (km/s)",
+    labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma_*$ (km/s)",
               "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
               "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
     dataset = "MUSE"
@@ -248,6 +248,7 @@ if __name__ == "__main__":
     # t["V_uerr"] = t["Verr"]
     t["R_uerr"] = 0
     t["R_lerr"] = 0
+    t["sigma"] = np.where(t["sigma"] < 500, t["sigma"], np.nan)
     ############################################################################
     output = os.path.join(outdir, "radial_profiles")
     plot_profiles(t, output, "R",

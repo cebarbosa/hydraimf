@@ -203,7 +203,7 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
         results = hstack([geom, sn_table])
         results.rename_column("SN/Ang", "SNRperAng")
         # Adding stellar population table
-        mcmc_dir = os.path.join(wdir, "EMCEE")
+        mcmc_dir = os.path.join(wdir, "EMCEE1")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
                 "results.fits")])
         stpop = [Table.read(os.path.join(mcmc_dir, _ )) for _ in tables]
@@ -215,13 +215,14 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
     outdir = os.path.join(wdir, "plots")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
-    fields = ["SNRperAng", "Z", "T", "imf", "alphaFe", "NaFe", "Av"]
+    fields = ["SNRperAng", "Z", "T", "imf", "alphaFe", "NaFe", "Av", "sigma"]
     labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
-              "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$"]
-    cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f"]
-    lims = [[None, None], [-.1, 0.2], [6, 14], [None, None],
-            [0.05, 0.25], [0.25, 0.6], [0, 0.05]]
-    xloc = [-4, -4.5, -4, -5., -4.5, -4.5, -4.5]
+              "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$",
+              "$\sigma_*$ (km/s)"]
+    cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f", "%i"]
+    lims = [[None, None], [-.1, 0.2], [6, 14], [1.3, 2.3],
+            [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None]]
+    xloc = [-4, -4.5, -4, -5., -4.5, -4.5, -4.5, -4]
     cmaps = ["viridis"] * len(xloc)
     pvm = PlotVoronoiMaps([results], fields, outdir,
                           targetSN=targetSN, fields=["fieldA"], lims=lims,
