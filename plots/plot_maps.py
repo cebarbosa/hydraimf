@@ -203,7 +203,7 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
         results = hstack([geom, sn_table])
         results.rename_column("SN/Ang", "SNRperAng")
         # Adding stellar population table
-        mcmc_dir = os.path.join(wdir, "EMCEE1")
+        mcmc_dir = os.path.join(wdir, "EMCEE")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
                 "results.fits")])
         stpop = [Table.read(os.path.join(mcmc_dir, _ )) for _ in tables]
@@ -225,7 +225,7 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
     xloc = [-4, -4.5, -4, -5., -4.5, -4.5, -4.5, -4]
     cmaps = ["viridis"] * len(xloc)
     pvm = PlotVoronoiMaps([results], fields, outdir,
-                          targetSN=targetSN, fields=["fieldA"], lims=lims,
+                          targetSN=targetSN, fields=["fieldA"], #lims=lims,
                           labels=labels, cb_fmts=cb_fmts, cmaps=cmaps)
 
     xylims = [[10.1, -10.1], [-12, 9]]

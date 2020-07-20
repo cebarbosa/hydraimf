@@ -164,17 +164,17 @@ def simple_binning(img, field=None):
 def run_ngc3311():
     dataset = "MUSE"
     data_dir = os.path.join(context.data_dir, dataset, "combined")
-    os.chdir(data_dir)
-    fields = context.fields[:1]
+    fields = ["fieldB"]
     for field in fields:
+        f = field.replace("f", "F")
         os.chdir(os.path.join(data_dir, field))
-        cubename = "NGC3311_{}_DATACUBE_COMBINED.fits".format(field)
-        imgname = "NGC3311_{}_IMAGE_COMBINED.fits".format(field)
+        cubename = "NGC3311_{}_DATACUBE_COMBINED.fits".format(f)
+        imgname = "NGC3311_{}_IMAGE_COMBINED.fits".format(f)
         imgum = make_unsharp_mask(imgname, redo=False)
-        immasked = mask_regions(imgum, redo=False)
-        sexcat = run_sextractor(immasked, redo=False)
-        ignore = ignore(field)
-        imhalo = mask_sources(immasked, sexcat, ignore=ignore, redo=True)
+        immasked = mask_regions(imgum, redo=True)
+        sexcat = run_sextractor(immasked, redo=True)
+        ignore = ignore_sources(field)
+        imhalo = mask_sources(immasked, sexcat, ignore=ignore, redo=False)
         simple_binning(imhalo, field=field)
 
 def run_m87():
@@ -190,5 +190,5 @@ def run_m87():
 
 
 if __name__ == "__main__":
-    # run_ngc3311()
-    run_m87()
+    run_ngc3311()
+    # run_m87()

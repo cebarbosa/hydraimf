@@ -11,12 +11,13 @@ from __future__ import print_function, division
 import os
 import copy
 import re
+import getpass
 
-os.environ["OMP_NUM_THREADS"] = "2" # export OMP_NUM_THREADS=4
-os.environ["OPENBLAS_NUM_THREADS"] = "2" # export OPENBLAS_NUM_THREADS=4
-os.environ["MKL_NUM_THREADS"] = "2" # export MKL_NUM_THREADS=6
-os.environ["VECLIB_MAXIMUM_THREADS"] = "2" # export VECLIB_MAXIMUM_THREADS=4
-os.environ["NUMEXPR_NUM_THREADS"] = "2" # export NUMEXPR_NUM_THREADS=6
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+os.environ["NUMEXPR_NUM_THREADS"] = "2"
 
 import numpy as np
 from astropy.io import fits
@@ -393,7 +394,7 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None):
     ax.set_ylabel("Normalized flux")
     ax.xaxis.set_ticklabels([])
     ax.text(0.03, 0.88, "   ".join(summary), transform=ax.transAxes, fontsize=6)
-    plt.legend()
+    plt.legend(loc=1)
     ax.set_xlim(4700, 9400)
     ax = plt.subplot(axs[1])
     # for c, per in zip(colors, percs):
@@ -408,9 +409,10 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None):
     ax.set_xlabel(r"$\lambda$ (\r{A})")
     ax.set_ylabel("Residue (\%)")
     ax.set_xlim(4700, 9400)
-    plt.legend()
+    plt.legend(loc=1)
     plt.subplots_adjust(left=0.065, right=0.995, hspace=0.02, top=0.99,
                         bottom=0.11)
+    fig.align_ylabels(axs)
     plt.savefig("{}.png".format(outfig), dpi=250)
     return
 
@@ -467,7 +469,7 @@ def plot_corner(trace, outroot, title=None, redo=False):
         ax.axvline(np.percentile(x, 84), ls="--", c="k", lw=0.5)
     plt.text(0.6, 0.7, "\n".join(title), transform=plt.gcf().transFigure,
              size=8)
-    plt.subplots_adjust(left=0.12, right=0.995, top=0.98, bottom=0.08,
+    plt.subplots_adjust(left=0.11, right=0.99, top=0.98, bottom=0.08,
                         hspace=0.04, wspace=0.04)
     fig.align_ylabels()
     for fmt in ["png", "pdf"]:
@@ -511,22 +513,24 @@ def compare_traces(flux, fluxerr, sed, t1, t2):
     return
 
 def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
-                redo=False, nssps=1, porder=30, postprocessing=True):
+                redo=False, nssps=1, porder=30, dataset="MUSE"):
     """ Run pb full spectrum fitting. """
     # os.environ["OMP_NUM_THREADS"] = "8"
     ltype = "normal2" if ltype is None else ltype
     sample = "all" if sample is None else sample
     nssps_str = "" if nssps == 1 else "_{}ssps".format(nssps)
+    postprocessing = True if getpass.getuser() == "kadu" else False
     # Setting up directories
-    imgname, cubename = context.get_field_files("fieldA")
-    wdir = os.path.join(os.path.split(cubename)[0], "sn{}/sci".format(targetSN))
+    wdir = os.path.join(context.data_dir, dataset,
+                        "voronoi/sn{}/sci".format(targetSN))
     emcee_dir = os.path.join(os.path.split(wdir)[0], "EMCEE{}".format(
         nssps_str))
     mcmc_dir = os.path.join(os.path.split(wdir)[0], "MCMC{}".format(nssps_str))
     for dir_ in [emcee_dir, mcmc_dir]:
         if not os.path.exists(dir_):
             os.mkdir(dir_)
-    specnames = [_ for _ in sorted(os.listdir(wdir)) if _.endswith(".fits")]
+    specnames = sorted([_ for _ in sorted(os.listdir(wdir)) if _.endswith(
+            ".fits")])
     # Read first spectrum to set the dispersion
     data = Table.read(os.path.join(wdir, specnames[0]))
     wave_lin = data["wave"].data
@@ -537,9 +541,6 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
     print("Producing SED model...")
     sed, mw, sky = build_sed_model(wave, sample=sample, nssps=nssps,
                                  porder=porder)
-    # p0 = make_p0(sed)
-    # plt.plot(wave, sed(p0))
-    # plt.show()
     for specname in specnames:
         print("Processing spectrum {}".format(specname))
         name = specname.split(".")[0]
@@ -562,17 +563,19 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         # Run second method using initial results from MH run
         emcee_db = os.path.join(emcee_dir, "{}.h5".format(name))
         if not os.path.exists(emcee_db) or redo:
+            os.environ["OMP_NUM_THREADS"] = "8"
             print("Running EMCEE...")
             run_emcee(flam, flamerr, sed, emcee_db)
+            os.environ["OMP_NUM_THREADS"] = "2"
         reader = emcee.backends.HDFBackend(emcee_db)
-        samples = reader.get_chain(discard=500, flat=True, thin=100)
+        samples = reader.get_chain(discard=800, flat=True, thin=100)
         emcee_traces = samples[:, :len(sed.parnames)]
         idx = [sed.parnames.index(p) for p in sed.sspcolnames]
         ptrace_emcee = Table(emcee_traces[:, idx], names=sed.sspcolnames)
         if postprocessing:
             print("Producing corner plots...")
             title = "Spectrum {}".format(binnum)
-            plot_corner(ptrace_emcee, emcee_db, title=title, redo=redo)
+            plot_corner(ptrace_emcee, emcee_db, title=title, redo=False)
             print("Producing fitting figure...")
             plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
                          redo=False, sky=sky)
@@ -584,4 +587,4 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
             make_table(summary_trace, binnum, outtab)
 
 if __name__ == "__main__":
-    run_ngc3311(postprocessing=True)
+    run_ngc3311()

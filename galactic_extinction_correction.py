@@ -18,9 +18,12 @@ import extinction
 
 import context
 
-def correct_spectra(input_dir, output_dir, filenames, unit=None):
+def correct_spectra(input_dir, output_dir, filenames, unit=None, redo=False):
     unit = 1. if unit is None else unit
     for fname in filenames:
+        output = os.path.join(output_dir, fname)
+        if os.path.exists(output) and not redo:
+            continue
         data = Table.read(os.path.join(input_dir, fname))
         wave = data["wave"].data.byteswap().newbyteorder() * u.angstrom
         flam = data["flux"].data * unit
@@ -31,13 +34,13 @@ def correct_spectra(input_dir, output_dir, filenames, unit=None):
         flam = extinction.remove(CCM89, flam)
         flamerr = extinction.remove(CCM89, flamerr)
         table = Table([wave, flam, flamerr], names=["wave", "flam", "flamerr"])
-        table.write(os.path.join(output_dir, fname), overwrite=True)
+        table.write(output, overwrite=True)
 
-def run_ngc3311(targetSN=250):
-    indir = os.path.join(context.get_data_dir("MUSE"), "fieldA",
-                        "sn{}/spec1d_FWHM2.95".format(targetSN))
-    outdir = os.path.join(context.get_data_dir("MUSE"), "fieldA",
-                          "sn{}/sci".format(targetSN))
+def run_ngc3311(targetSN=250, dataset="MUSE"):
+    vordir = os.path.join(context.data_dir, dataset, "voronoi/sn{}".format(
+                          targetSN))
+    indir = os.path.join(vordir, "spec1d_FWHM2.95".format(targetSN))
+    outdir = os.path.join(vordir, "sci")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     filenames = sorted([_ for _ in os.listdir(indir) if _.endswith(".fits")])
@@ -56,5 +59,5 @@ def run_m87(targetSN=500):
     correct_spectra(indir, outdir, filenames, unit=unit)
 
 if __name__ == "__main__":
-    # run_ngc3311()
-    run_m87()
+    run_ngc3311()
+    # run_m87()

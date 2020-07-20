@@ -237,18 +237,18 @@ def prepare_muse(sample="test", w1=4500, w2=10000, fwhm=2.95, velscale=50):
     print("The program took {} to run".format(endtime - starttime))
 
 def prepare_wifis():
-    w1 = 11600
-    w2 = 12400
-    velscale = 20 # km / s
+    w1 = 8800
+    w2 = 13200
+    velscale = 200 # km / s
     starttime = datetime.now()
-    prepare_templates_emiles_muse(w1, w2, velscale, sample="kinematics",
-                                  redo=True, fwhm=2.5, instrument="wifis")
+    prepare_templates_emiles_muse(w1, w2, velscale, sample="test",
+                                  redo=False, fwhm=2.5, instrument="wifis")
     endtime = datetime.now()
     print("The program took {} to run".format(endtime - starttime))
 
 
 if __name__ == "__main__":
-    prepare_muse(sample="test", w1=4500, w2=9400, velscale=200)
-    # prepare_wifis()
+    # prepare_muse(sample="test", w1=4500, w2=9400, velscale=200)
+    prepare_wifis()
 
 
