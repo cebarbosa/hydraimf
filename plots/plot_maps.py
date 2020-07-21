@@ -26,10 +26,10 @@ import context
 from geomfov import calc_extent, offset_extent, get_geom
 
 class PlotVoronoiMaps():
-    def __init__ (self, tables, columns, outdir, labels=None, lims=None,
-                  cmaps=None, cb_fmts=None, targetSN=70, fields=None,
+    def __init__ (self, table, columns, outdir, labels=None, lims=None,
+                  cmaps=None, cb_fmts=None, targetSN=70,
                   dataset="MUSE"):
-        self.tables = tables
+        self.table = table
         self.columns = columns
         self.outdir = outdir
         self.labels = self.columns if labels is None else labels
@@ -43,7 +43,12 @@ class PlotVoronoiMaps():
         if self.cb_fmts is None:
             self.cb_fmts = len(self.columns) * ["%i"]
         self.targetSN = targetSN
-        self.fields = context.fields if fields is None else fields
+        self.table["field"] = [_.split("_")[0] for _ in self.table["BIN"]]
+        self.fields = np.unique(self.table["field"])
+        self.tables = []
+        for field in np.unique(self.fields):
+            idx = np.where(self.table["field"] == field)[0]
+            self.tables.append(self.table[idx])
         self.dataset = dataset
         self.coords = SkyCoord(context.ra0, context.dec0)
         self.D = context.D * u.Mpc
@@ -52,7 +57,6 @@ class PlotVoronoiMaps():
              arrows=True, sigma=None, xloc=None):
         """ Make the plots. """
         xloc = len(self.columns) * [-4] if xloc is None else xloc
-        sigma_str = "" if sigma is None else "_sigma{}".format(sigma)
         if xylims is None:
             xylims = [(25, -10), (-25, 20)]
         for j, col in enumerate(self.columns):
@@ -65,15 +69,17 @@ class PlotVoronoiMaps():
             plt.minorticks_on()
             self.make_contours(alpha=0.5)
             kmaps = []
+            extents = []
             for i, (field, table) in enumerate(zip(self.fields, self.tables)):
                 binsfile = os.path.join(context.get_data_dir(self.dataset),
                         field, "sn{0}/voronoi2d_sn{0}.fits".format(
                         self.targetSN))
-                bins = table["BIN"].astype(np.float)
+                bins = np.array([float(_.split("_")[1]) for _ in table["BIN"]])
                 vector = table[col].astype(np.float)
                 image = context.get_field_files(field)[0]
                 extent = calc_extent(image, self.coords, self.D)
                 extent = offset_extent(extent, field)
+                extents.append(extent)
                 binimg = fits.getdata(binsfile)
                 kmap = np.zeros_like(binimg)
                 kmap[:] = np.nan
@@ -83,14 +89,15 @@ class PlotVoronoiMaps():
                     idx = np.where(binimg == bin)
                     kmap[idx] = v
                 kmaps.append(kmap)
-            automin = np.nanmin(np.array(kmaps))
-            automax = np.nanmax(np.array(kmaps))
+
+            automin = np.nanmin(self.table[col])
+            automax = np.nanmax(self.table[col])
             vmin = self.lims[j][0] if self.lims[j][0] is not None else automin
             vmax = self.lims[j][1] if self.lims[j][1] is not None else automax
             for i in range(len(self.fields)):
-                m = plt.imshow(kmap, origin="bottom", cmap=self.cmaps[j],
+                m = plt.imshow(kmaps[i], origin="bottom", cmap=self.cmaps[j],
                                vmin=vmin, vmax=vmax,
-                               extent=extent,
+                               extent=extents[i],
                                aspect="equal", alpha=1)
             plt.xlim(*xylims[0])
             plt.ylim(*xylims[1])
@@ -187,35 +194,42 @@ class PlotVoronoiMaps():
         # ax.text(xpos,ylpos,cblabel,rotation=rotation)
         return
 
-def make_maps(targetSN=250, dataset="MUSE", update=False):
+def make_table(targetSN=250, dataset="MUSE", update=False):
     """ Produces a test plot using the geometry table. """
-    wdir = os.path.join(context.get_data_dir(dataset), "fieldA",
+    wdir = os.path.join(context.data_dir, dataset, "voronoi",
                         "sn{}".format(targetSN))
-    results_dir = os.path.join(wdir, "results.fits")
-    if not os.path.exists(results_dir) or update:
-        geom = get_geom("fieldA", targetSN)
-        geomtab = os.path.join(context.get_data_dir(dataset),
-                               "fieldA/sn{}/geom.fits".format(targetSN))
-        geom.write(geomtab, overwrite=True)
-        # ppxftable = os.path.join(wdir, "ppxf_vel50_w4500_10000_kinematics.fits")
-        # results = Table.read(ppxftable)
-        sn_table = Table.read(os.path.join(wdir, "measured_sn_optical.fits"))
+    results_table = os.path.join(wdir, "results.fits")
+    if not os.path.exists(results_table) or update:
+        geomA = get_geom("fieldA", targetSN)
+        geomB = get_geom("fieldB", targetSN)
+        geomA["BIN"] = ["fieldA_{}".format(_) for _ in geomA["BIN"]]
+        geomB["BIN"] = ["fieldB_{}".format(_) for _ in geomB["BIN"]]
+        geom = vstack([geomA, geomB])
+        sn_table = Table.read(os.path.join(wdir, "measured_sn.fits"))
         results = hstack([geom, sn_table])
-        results.rename_column("SN/Ang", "SNRperAng")
+        results.rename_column("SN/Ang", "SNR")
         # Adding stellar population table
         mcmc_dir = os.path.join(wdir, "EMCEE")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
                 "results.fits")])
+        fields = [_.split("_")[0] for _ in tables]
         stpop = [Table.read(os.path.join(mcmc_dir, _ )) for _ in tables]
         stpop = vstack(stpop)
+        stpop["BIN"] = ["{}_{}".format(x,y) for x,y in zip(fields,
+                                                           stpop["BIN"])]
         results = join(results, stpop, keys="BIN")
-        results.write(results_dir, overwrite=True)
+        results.write(results_table, overwrite=True)
     else:
-        results = Table.read(results_dir)
+        results = Table.read(results_table)
+    return results
+
+def make_maps(results, targetSN=250, dataset="MUSE"):
+    wdir = os.path.join(context.data_dir, dataset, "voronoi",
+                        "sn{}".format(targetSN))
     outdir = os.path.join(wdir, "plots")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
-    fields = ["SNRperAng", "Z", "T", "imf", "alphaFe", "NaFe", "Av", "sigma"]
+    fields = ["SNR", "Z", "T", "imf", "alphaFe", "NaFe", "Av", "sigma"]
     labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
               "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$",
               "$\sigma_*$ (km/s)"]
@@ -224,88 +238,13 @@ def make_maps(targetSN=250, dataset="MUSE", update=False):
             [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None]]
     xloc = [-4, -4.5, -4, -5., -4.5, -4.5, -4.5, -4]
     cmaps = ["viridis"] * len(xloc)
-    pvm = PlotVoronoiMaps([results], fields, outdir,
-                          targetSN=targetSN, fields=["fieldA"], #lims=lims,
+    pvm = PlotVoronoiMaps(results, fields, outdir,
+                          targetSN=targetSN, #lims=lims,
                           labels=labels, cb_fmts=cb_fmts, cmaps=cmaps)
 
     xylims = [[10.1, -10.1], [-12, 9]]
     pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc)
 
-def make_triptychs(targetSN=250, dataset="MUSE"):
-    wdir = os.path.join(context.get_data_dir(dataset), "fieldA",
-                        "sn{}".format(targetSN))
-    table= Table.read(os.path.join(wdir, "results.fits"))
-    triptychs = [["SNRperAng", "Z", "NaFe"], ["T", "alphaFe", "imf"]]
-    binsfile = os.path.join(context.get_data_dir(dataset),
-                "fieldA", "sn{0}/voronoi2d_sn{0}.fits".format(targetSN))
-    bins = table["BIN"].astype(np.float)
-    image = context.get_field_files("fieldA")[0]
-    extent = calc_extent(image)
-    extent = offset_extent(extent, "fieldA")
-    binimg = fits.getdata(binsfile)
-    # Image for contours
-    vband = os.path.join(context.home, "images/hydra1.fits")
-    vdata = fits.getdata(vband, verify=False)
-    vdata = np.clip(vdata - 4900., 1., vdata)
-    muv = -2.5 * np.log10(vdata / 480. / 0.252 / 0.252) + 27.2
-    contours = np.linspace(19.5, 23.5, 9)
-    nsigma = 2
-    datasmooth = ndimage.gaussian_filter(muv, nsigma, order=0.)
-    extent_vband = np.array(calc_extent(vband, extension=0))
-    extent_vband[:2] += 3
-    extent_vband[2:] -= 0.2
-    labels = {"SNRperAng": "SNR (\\r{A}$^{-1}$)",
-              "Z": "[Z/H]", "T": "Age (Gyr)",
-              "imf": "$\\Gamma_b$", "alphaFe": r"[$\alpha$/Fe]",
-              "NaFe": "[Na/Fe]"}
-    names = ["maps1", "maps2"]
-    for j, triptych in enumerate(triptychs):
-        fig = plt.figure(figsize=(6.5, 2.8))
-
-        gs = gridspec.GridSpec(2, 3, height_ratios=[0.92, 0.08])
-        gs.update(left=0.08, right=0.99, bottom=0.12, top=0.92, wspace=0.04,
-                  hspace=0.00)
-        for i, col in enumerate(triptych):
-            vector = table[col].astype(np.float)
-            kmap = np.zeros_like(binimg)
-            kmap[:] = np.nan
-            for bin, v in zip(bins, vector):
-                if not np.isfinite(v):
-                    continue
-                idx = np.where(binimg == bin)
-                kmap[idx] = v
-            ax = fig.add_subplot(gs[0, i])
-            ax.set_facecolor("0.85")
-            cs = ax.contour(datasmooth, contours, extent=extent_vband,
-                             colors="k", linewidths=0.8)
-            m = ax.imshow(kmap, origin="bottom", extent=extent,
-                           aspect="equal", alpha=1)
-            ax.set_xlabel("X (kpc)")
-            ax.xaxis.set_label_position('top')
-            ax.xaxis.set_ticks_position('top')
-            ax.tick_params(
-                axis='x',  # changes apply to the x-axis
-                which='both',  # both major and minor ticks are affected
-                bottom=True,
-                top=True,
-                labelbottom=False)
-            cbax = plt.subplot(gs[1, i])
-            cbar = Colorbar(ax=cbax, mappable=m, orientation="horizontal",
-                            ticklocation='bottom')
-            cbar.set_label(labels[col])
-            cbar.ax.xaxis.set_label_position('bottom')
-            if i > 0:
-                ax.yaxis.set_ticklabels([])
-            else:
-                ax.set_ylabel("Y (kpc)")
-        for fmt in ["png", "pdf"]:
-            plt.savefig(os.path.join(wdir, "plots/{}.{}".format(names[j], fmt)),
-                        dpi=300)
-        plt.close()
-
-
-
-
 if __name__ == "__main__":
-    make_maps(targetSN=250, update=True)
-    # make_triptychs()
+    results = make_table(update=False)
+    make_maps(results[:-1])

@@ -235,13 +235,13 @@ if __name__ == "__main__":
               "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
     dataset = "MUSE"
     targetSN = 250
-    wdir =  os.path.join(context.get_data_dir(dataset),
-                         "fieldA/sn{}".format(targetSN))
+    wdir =  os.path.join(context.data_dir, dataset, "voronoi",
+                         "sn{}".format(targetSN))
     outdir = os.path.join(wdir, "plots")
     ############################################################################
     # Loading and preparing data
     tfile = os.path.join(wdir, "results.fits")
-    t = Table.read(tfile)
+    t = Table.read(tfile)[:-1]
     # t["sigma_lerr"] = t["sigmaerr"]
     # t["sigma_uerr"] = t["sigmaerr"]
     # t["V_lerr"] = t["Verr"]
