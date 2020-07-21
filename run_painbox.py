@@ -452,10 +452,16 @@ def plot_corner(trace, outroot, title=None, redo=False):
             sns.kdeplot(x, shade=True, ax=ax, color="C0")
         else:
             y = data[:, i2]
+            r, p = stats.pearsonr(x, y)
+            c = "r" if p <= 0.01 else "b"
             sns.kdeplot(x, y, shade=True, ax=ax, cmap="Blues")
             ax.axhline(np.median(y), ls="-", c="k", lw=0.5)
             ax.axhline(np.percentile(y, 16), ls="--", c="k", lw=0.5)
             ax.axhline(np.percentile(y, 84), ls="--", c="k", lw=0.5)
+            props = dict(facecolor='white', alpha=0.95, edgecolor="none")
+            signal = "+" if r >= 0 else ""
+            ax.text(0.37, 0.80, "$r={}{:.2f}$".format(signal, r),
+                    transform=ax.transAxes, fontsize=4, color=c, bbox=props)
         if i > N * (N - 1) - 1:
             ax.set_xlabel(labels[p1], size=7)
         else:
@@ -575,7 +581,7 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         if postprocessing:
             print("Producing corner plots...")
             title = "Spectrum {}".format(binnum)
-            plot_corner(ptrace_emcee, emcee_db, title=title, redo=False)
+            plot_corner(ptrace_emcee, emcee_db, title=title, redo=True)
             print("Producing fitting figure...")
             plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
                          redo=False, sky=sky)
