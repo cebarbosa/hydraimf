@@ -38,6 +38,7 @@ def plot_profiles(t, output, xfield, yfields, redo=False):
                         hspace=0.06)
     for fmt in ["pdf", "png"]:
         plt.savefig("{}.{}".format(output, fmt), dpi=250)
+
     plt.close()
 
 def plot_single(t, output, xfield, yfield, return_ax=False, label=None,

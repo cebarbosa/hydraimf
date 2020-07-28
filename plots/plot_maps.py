@@ -53,7 +53,7 @@ class PlotVoronoiMaps():
         self.coords = SkyCoord(context.ra0, context.dec0)
         self.D = context.D * u.Mpc
 
-    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.5),
+    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.8),
              arrows=True, sigma=None, xloc=None):
         """ Make the plots. """
         xloc = len(self.columns) * [-4] if xloc is None else xloc
@@ -63,7 +63,7 @@ class PlotVoronoiMaps():
             print(col)
             fig = plt.figure(figsize=figsize)
             gs = gridspec.GridSpec(1,1)
-            gs.update(left=0.12, right=0.97, bottom=0.1, top=0.99)
+            gs.update(left=0.09, right=0.995, bottom=0.085, top=0.995)
             ax = plt.subplot(gs[0])
             ax.set_facecolor("0.85")
             plt.minorticks_on()
@@ -133,11 +133,11 @@ class PlotVoronoiMaps():
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((-9.7, -11.5), 8.4, 3.1, alpha=1,
+                plt.gca().add_patch(Rectangle((-10.5, -11.5), 8.8, 3.1, alpha=1,
                                               zorder=10, edgecolor="w",
                                               linewidth=1, facecolor="w"))
                 self.draw_colorbar(fig, ax, m, orientation="horizontal",
-                                   cbar_pos=[0.63, 0.16, 0.3, 0.05],
+                                   cbar_pos=[0.65, 0.135, 0.3, 0.05],
                                    ticks=np.linspace(vmin, vmax, 4),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
@@ -171,8 +171,9 @@ class PlotVoronoiMaps():
             plt.imshow(muv, cmap="bone", extent=extent, vmax=vmax, vmin=vmin,
                        alpha=alpha, origin="bottom")
         if label:
-            plt.clabel(cs, contours[0::2], fmt="%d", fontsize=fontsize,
-                       inline_spacing=-3)
+            plt.clabel(cs, contours[0:-1:2], fmt="%d", fontsize=fontsize,
+                       inline_spacing=-3,
+                   manual=((-1.25, 1), (1.25, -4), (-6, 7)))
         return
 
     def draw_colorbar(self, fig, ax, coll, ticks=None, cblabel="",
@@ -236,15 +237,15 @@ def make_maps(results, targetSN=250, dataset="MUSE"):
     cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f", "%i"]
     lims = [[None, None], [-.1, 0.2], [6, 14], [1.3, 2.3],
             [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None]]
-    xloc = [-4, -4.5, -4, -5., -4.5, -4.5, -4.5, -4]
+    xloc = [-4, -5.5, -4.5, -6., -5.5, -5, -6, -4.5]
     cmaps = ["viridis"] * len(xloc)
     pvm = PlotVoronoiMaps(results, fields, outdir,
                           targetSN=targetSN, #lims=lims,
                           labels=labels, cb_fmts=cb_fmts, cmaps=cmaps)
 
-    xylims = [[10.1, -10.1], [-12, 9]]
+    xylims = [[11, -11], [-12, 12]]
     pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc)
 
 if __name__ == "__main__":
     results = make_table(update=False)
-    make_maps(results[:-1])
+    make_maps(results)
