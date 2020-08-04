@@ -78,6 +78,7 @@ elif platform.node() in ["t80s-jype2", "t80s-jype"]:
     home = "/mnt/public/kadu/hydraimf"
 
 data_dir = os.path.join(home, "data")
+tables_dir = os.path.join(home, "tables")
 
 config['data_dir'] = os.path.join(data_dir, "dustmaps")
 if not os.path.exists(config["data_dir"]): # Just to run once in my example

@@ -28,7 +28,7 @@ def calc_correlations(targetSN=250, dataset="MUSE"):
     emcee_dir = os.path.join(wdir, "EMCEE")
     dbs = sorted([_ for _ in os.listdir(emcee_dir) if _.endswith(".h5")])
     sed = build_sed_model(np.linspace(4500, 9000, 1000), sample="test")[0]
-    params = np.array(sed.sspcolnames)
+    params = np.array(sed.sspcolnames + ["sigma"])
     idx = [sed.parnames.index(p) for p in params]
     idxs = list(itertools.permutations(idx, 2))
     pairs = list(itertools.permutations(params, 2))
@@ -59,18 +59,18 @@ def calc_correlations(targetSN=250, dataset="MUSE"):
             minaxis[k, n] = b
             angs[k, n] = ang
             pvals[k, n] = p
-    r = np.mean(rs, axis=1)
+    r = np.median(rs, axis=1)
     sort = np.argsort(np.abs(r))[::-1]
     pairs = [pairs[s] for s in sort]
     r = r[sort]
     rsd = np.std(rs, axis=1)[sort]
-    a = np.mean(majaxis, axis=1)[sort]
-    b = np.mean(minaxis, axis=1)[sort]
+    a = np.median(majaxis, axis=1)[sort]
+    b = np.median(minaxis, axis=1)[sort]
     asd = np.std(majaxis, axis=1)[sort]
     bsd = np.std(minaxis, axis=1)[sort]
-    ang = np.mean(angs, axis=1)[sort]
+    ang = np.median(angs, axis=1)[sort]
     angsd = np.std(angs, axis=1)[sort]
-    p = np.mean(pvals, axis=1)[sort]
+    p = np.median(pvals, axis=1)[sort]
     psd = np.std(pvals, axis=1)[sort]
     p1 = [p[0] for p in pairs]
     p2 = [p[1] for p in pairs]
@@ -79,6 +79,18 @@ def calc_correlations(targetSN=250, dataset="MUSE"):
     tab = Table([p1, p2, r, rsd, a, asd, b, bsd, ang, angsd, p, psd],
                 names=names)
     tab.write(os.path.join(wdir, "fit_stats.fits"), overwrite=True)
+    # Make latex table
+    labels = {"T": "Age (Gyr)", "Z": "[Z/H]", "alphaFe": "[$\\alpha$/Fe]",
+              "NaFe": "[Na/Fe]", "sigma": "$\\sigma_*$ (km/s)", "imf":
+                  "$\\Gamma_b$"}
+    for i, line in enumerate(tab):
+        if i%2 == 1:
+            continue
+        l = [labels[line["param1"]], labels[line["param2"]]]
+        for p in ["r", "p", "a", "b", "ang"]:
+            col = "${:.2f}\pm{:.2f}$".format(line[p], line["{}err".format(p)])
+            l.append(col)
+        print(" & ".join(l) + "\\\\")
 
 if __name__ == "__main__":
     calc_correlations()

@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from matplotlib.patches import Ellipse
 
 import context
 
@@ -38,7 +40,6 @@ def plot_profiles(t, output, xfield, yfields, redo=False):
                         hspace=0.06)
     for fmt in ["pdf", "png"]:
         plt.savefig("{}.{}".format(output, fmt), dpi=250)
-
     plt.close()
 
 def plot_single(t, output, xfield, yfield, return_ax=False, label=None,
@@ -230,38 +231,145 @@ def plot_sarzi(t, figsize=(7.24, 2.5)):
         plt.savefig("{}.{}".format(output, fmt), dpi=300)
     plt.close()
 
+def get_colors(R):
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=max(R),
+                                       clip=True)
+    cmap = plt.get_cmap('Blues_r')
+    new_cmap = truncate_colormap(cmap, 0.0, 0.7)
+    mapper = cm.ScalarMappable(norm=norm, cmap=new_cmap)
+    return mapper, np.array([(mapper.to_rgba(v)) for v in R])
+
+def plot_imf_relations(t, figsize=(7.24, 4.5)):
+    global labels, wdir
+    corr = Table.read(os.path.join(wdir, "fit_stats.fits"))
+    fig = plt.figure(figsize=figsize)
+    gs = gridspec.GridSpec(2, 3, figure=fig)
+    gs.update(left=0.05, right=0.91, bottom=0.07, top=0.99, wspace=0.03,
+              hspace=0.18)
+    mapper, colors = get_colors(t["R"])
+    yfield = "imf"
+    ys = t[yfield]
+    yerrs =  np.array([t["{}_lerr".format(yfield)], t["{}_uerr".format(
+        yfield)]]).T
+    xlim = {"T": [None, None], "Z": [-0.2, 0.25], "alphaFe": [None, 0.45],
+            "NaFe": [None, 0.7], "sigma": [100, 400], "Re": [None, 1.2]}
+    xelf = {"T": 0.8, "Z": 0.75, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.5,
+            "Re": 0.3}
+    for i, xfield in enumerate(["T", "Z", "alphaFe", "NaFe", "sigma", "Re"]):
+        xs = t[xfield]
+        xerrs = np.array([t["{}_lerr".format(xfield)], t["{}_uerr".format(
+            xfield)]]).T
+        ax = plt.subplot(gs[i])
+        for x, y, xerr, yerr, c in zip(xs, ys, xerrs, yerrs, colors):
+            ax.errorbar(x, y, yerr=np.atleast_2d(yerr).T,
+                        xerr=np.atleast_2d(xerr).T, fmt="o",
+                        ecolor="0.8", mec="w", color=c,
+                        mew=0.5, elinewidth=0.5)
+        if i in [0,3]:
+            ax.set_ylabel(labels[yfield])
+        else:
+            ax.yaxis.set_ticklabels([])
+        ax.set_xlabel(labels[xfield])
+        ax.set_xlim(xlim[xfield])
+        ax.set_ylim(0.3, 3.2)
+        # plot parameter correlations
+        idx = np.where((corr["param1"]==xfield) & (corr["param2"]==yfield))[0]
+        if idx:
+            a = corr["a"][idx]
+            b = corr["b"][idx]
+            ang = corr["ang"][idx]
+            xmin, xmax = ax.get_xlim()
+            ymin, ymax = ax.get_ylim()
+            xel = xmin + xelf[xfield] * (xmax - xmin)
+            yel = ymin + 0.2 * (ymax - ymin)
+            ellipse = Ellipse((xel, yel), a, b, ang,
+                              facecolor="none", edgecolor="r", linestyle="--")
+            ax.text(xel - 0.03 * (xmax - xmin),
+                    yel - 0.02 * (ymax - ymin), "$1\sigma$", size=5.5,
+                    c="r")
+            ax.add_patch(ellipse)
+        # Plot results from Parikh et al. (2018)
+        xtable = os.path.join(context.home, "tables/parikh2018_{}.txt".format(
+                              xfield))
+        if os.path.exists(xtable):
+            ytable = os.path.join(context.home,
+                                  "tables/parikh2018_{}.txt".format(yfield))
+            y = np.loadtxt(ytable).ravel()[::2]
+            x = np.loadtxt(xtable).ravel()[::2]
+            ax.plot(x, y, "x", c="C1", label="Parikh et al. (2018)")
+        stable = os.path.join(context.home,
+                 "tables/sarzi2017_{}_imf.csv".format(xfield))
+        if os.path.exists(stable):
+            x, y = np.loadtxt(stable, delimiter=",", unpack=True)
+            ax.plot(x, y, "-", c="C2", label="Sarzi et al. (2017)")
+            ax.plot(x[0], y[0], "o", c="C2", label=None)
+        if xfield == "Z":
+            z = np.linspace(-0.3, 0.2, 50)
+            # Martin-Navarro 2015
+            a = np.random.normal(3.1, 0.5, len(z))
+            b = np.random.normal(2.2, 0.1, len(z))
+            y = a * z[:, np.newaxis] + b
+            ax.plot(z, y.mean(axis=1), "-", c="C4",
+                    label="Martín-Navarro et al.(2015)")
+            ax.plot(z, np.percentile(y, 16, axis=1), "--", c="C4")
+            ax.plot(z, np.percentile(y, 84, axis=1), "--", c="C4")
+        if i == 5:
+            plt.legend(loc=3, frameon=False, )
+
+
+    cax = inset_axes(ax,  # here using axis of the lowest plot
+                       width="10%",  # width = 5% of parent_bbox width
+                       height="180%",  # height : 340% good for a (4x4) Grid
+                       loc='lower left',
+                       bbox_to_anchor=(1.05, 0.25, 1, 1),
+                       bbox_transform=ax.transAxes,
+                       borderpad=0)
+    cbar = fig.colorbar(mapper, cax=cax, orientation="vertical")
+    cbar.set_label("R (kpc)")
+    output = os.path.join(wdir, "plots/imf_relations")
+    print(output)
+    for fmt in ["pdf", "png"]:
+        plt.savefig("{}.{}".format(output, fmt), dpi=300)
+    plt.close()
+
 if __name__ == "__main__":
     labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma_*$ (km/s)",
               "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
-              "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]"}
+              "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]",
+              "Re" : "$R / R_e$"}
     dataset = "MUSE"
     targetSN = 250
     wdir =  os.path.join(context.data_dir, dataset, "voronoi",
                          "sn{}".format(targetSN))
     outdir = os.path.join(wdir, "plots")
-    ############################################################################
+    ###########################################################################
     # Loading and preparing data
     tfile = os.path.join(wdir, "results.fits")
-    t = Table.read(tfile)[:-1]
+    t = Table.read(tfile)
     # t["sigma_lerr"] = t["sigmaerr"]
     # t["sigma_uerr"] = t["sigmaerr"]
     # t["V_lerr"] = t["Verr"]
     # t["V_uerr"] = t["Verr"]
     t["R_uerr"] = 0
     t["R_lerr"] = 0
-    t["sigma"] = np.where(t["sigma"] < 500, t["sigma"], np.nan)
+    t["Re"] = t["R"] / 8.4
+    t["Re_uerr"] = 0
+    t["Re_lerr"] = 0
+    # t["sigma"] = np.where(t["sigma"] < 500, t["sigma"], np.nan)
     ############################################################################
-    output = os.path.join(outdir, "radial_profiles")
-    plot_profiles(t, output, "R",
-                  ["T", "Z", "imf", "alphaFe", "NaFe", "sigma"], redo=True)
+    plot_imf_relations(t)
     ############################################################################
-    output = os.path.join(outdir, "sigma_profiles")
-    plot_profiles(t, output, "sigma", ["imf", "Z", "T", "alphaFe", "NaFe"],
-                  redo=True)
-    ############################################################################
-    output = os.path.join(outdir, "metal_imf")
-    plot_single(t, output, "Z", "imf")
-    plt.close()
-    plot_sigma_imf(t)
-    plt.close()
-    plot_sarzi(t)
+    # output = os.path.join(outdir, "radial_profiles")
+    # plot_profiles(t, output, "R",
+    #               ["T", "Z", "imf", "alphaFe", "NaFe", "sigma"], redo=True)
+    # ###########################################################################
+    # output = os.path.join(outdir, "sigma_profiles")
+    # plot_profiles(t, output, "sigma", ["imf", "Z", "T", "alphaFe", "NaFe"],
+    #               redo=True)
+    # ############################################################################
+    # output = os.path.join(outdir, "metal_imf")
+    # plot_single(t, output, "Z", "imf")
+    # plt.close()
+    # plot_sigma_imf(t)
+    # plt.close()
+    # plot_sarzi(t)
