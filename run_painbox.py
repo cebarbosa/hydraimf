@@ -37,7 +37,7 @@ import emcee
 from scipy import stats
 
 import context
-from paintbox import paintbox as pb
+import paintbox as pb
 
 def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
                     fwhm=2.95, em_oversample=8, porder=30, nssps=1):
@@ -353,12 +353,20 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None):
                                            "table..."):
         spec[i] = sed(traces[i])
         llike[i] = loglike(traces[i])
+    outmodels = db.replace(".h5", "_seds.fits")
+    hdu0 = fits.PrimaryHDU(spec)
+    hdu1 = fits.ImageHDU(wave)
+    hdus = [hdu0, hdu1]
     skyspec = np.zeros((len(traces), len(wave)))
     if sky is not None:
         idx = [i for i,p in enumerate(sed.parnames) if p.startswith("sky")]
         skytrace = traces[:, idx]
         for i in tqdm(range(len(skytrace)), desc="Loading sky models"):
             skyspec[i] = sky(skytrace[i])
+        hdu2 = fits.ImageHDU(skyspec)
+        hdus.append(hdu2)
+    hdulist = fits.HDUList(hdus)
+    hdulist.writeto(outmodels, overwrite=True)
     fig = plt.figure()
     plt.plot(llike)
     plt.savefig("{}_loglike.png".format(db))
@@ -414,6 +422,7 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None):
                         bottom=0.11)
     fig.align_ylabels(axs)
     plt.savefig("{}.png".format(outfig), dpi=250)
+    plt.show()
     return
 
 def plot_corner(trace, outroot, title=None, redo=False):
@@ -544,10 +553,19 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
     _, logwave, velscale = util.log_rebin([wave_lin[0], wave_lin[-1]], flam,
                                     velscale=velscale)
     wave = np.exp(logwave)[1:-1]
+    # Masking wavelengths with sky lines/ residuals
+    skylines = np.array([4792, 4860, 5577, 5895, 6300, 6363, 6562, 6583, 6717,
+                         6730, 7246, 8286, 8344, 8430, 8737, 8747, 8757, 8767,
+                         8777, 8787, 8797, 8827, 8836, 8919, 9310])
+    goodpixels = np.arange(len(wave))
+    for line in skylines:
+        sky = np.argwhere((wave <= line - 5) | (wave >= line + 5)).ravel()
+        goodpixels = np.intersect1d(goodpixels, sky)
+    wave = wave[goodpixels]
     print("Producing SED model...")
     sed, mw, sky = build_sed_model(wave, sample=sample, nssps=nssps,
                                  porder=porder)
-    for specname in specnames:
+    for specname in specnames[::-1]:
         print("Processing spectrum {}".format(specname))
         name = specname.split(".")[0]
         binnum = name.split("_")[2]
@@ -581,10 +599,10 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         if postprocessing:
             print("Producing corner plots...")
             title = "Spectrum {}".format(binnum)
-            plot_corner(ptrace_emcee, emcee_db, title=title, redo=True)
+            plot_corner(ptrace_emcee, emcee_db, title=title, redo=False)
             print("Producing fitting figure...")
             plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
-                         redo=False, sky=sky)
+                         redo=True, sky=sky)
             print("Making summary table...")
             outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
             summary_pars = sed.sspcolnames + ["Av", "V", "sigma"]
