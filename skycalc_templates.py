@@ -76,23 +76,25 @@ def make_sky_templates():
     templates.append(em)
     names.append("O$_2$")
     # NaI lines
-    idxs=[]
-    dw=1
-    for lam in [5889.99, 5895.59]:
-        l0 = lam - dw
-        l1 = lam + dw
-        idx = np.where((wave <= l1) & (wave >= l0))[0]
-        idxs.append(idx)
-    idxs = np.unique(np.hstack(idxs))
-    idxs_used.append(idx)
-    mask = np.zeros(len(wave))
-    mask[idxs] = 1
-    em = np.where(mask == 1, emission, 0)
-    templates.append(10 * em)
-    names.append("NaI")
+    add_NaI = False
+    if add_NaI:
+        idxs=[]
+        dw=1
+        for lam in [5889.99, 5895.59]:
+            l0 = lam - dw
+            l1 = lam + dw
+            idx = np.where((wave <= l1) & (wave >= l0))[0]
+            idxs.append(idx)
+        idxs = np.unique(np.hstack(idxs))
+        idxs_used.append(idx)
+        mask = np.zeros(len(wave))
+        mask[idxs] = 1
+        em = np.where(mask == 1, emission, 0)
+        templates.append(10 * em)
+        names.append("NaI")
     # Processing remaining lines
     idxs_used = np.unique(np.hstack(idxs_used))
-    add_other = True
+    add_other = False
     if add_other:
         mask = np.zeros(len(wave))
         mask[~idxs_used] = 1
