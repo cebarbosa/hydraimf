@@ -27,8 +27,10 @@ import context
 from run_painbox import build_sed_model
 
 class Mass2Light:
-    def __init__(self):
-        self.tablefile = os.path.join(context.tables_dir, "sdss_bi_iTp0.00.MAG")
+    def __init__(self, imf="bi"):
+        self.imf = imf
+        self.tablefile = os.path.join(context.tables_dir,
+                                      "sdss_{}_iTp0.00.MAG".format(imf))
         self.table = Table.read(self.tablefile, format="ascii.basic")
         imf = np.array([float(_[3:7]) for _ in self.table["model"]])
         z = np.array([float(_[8:13].replace("p", "+").replace("m", "-")) for
@@ -59,9 +61,11 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
     spec_dir = os.path.join(wdir, "sci")
     dbs = sorted([_ for _ in os.listdir(emcee_dir) if _.endswith(".h5")])
     ts = []
-    sed = build_sed_model(np.linspace(4500, 9000, 1000), sample="test")[0]
+    sed = build_sed_model(np.linspace(4500, 9000, 1000), sample="all")[0]
     params = np.array(sed.sspcolnames + ["sigma"])
+    idx_trace = [sed.parnames.index(p) for p in params]
     m2l = Mass2Light()
+    m2l_un = Mass2Light(imf="un")
     parnames = sed.sspcolnames + ["sigma", "M2L", "alpha", "logSigma"]
     idx = np.arange(len(parnames))
     idxs = list(itertools.permutations(idx, 2))
@@ -76,7 +80,8 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
         t = Table()
         t["BIN"] = ["_".join(db.replace(".h5", "").split("_")[::2])]
         reader = emcee.backends.HDFBackend(os.path.join(emcee_dir, db))
-        samples = reader.get_chain(discard=800, flat=True, thin=100).T[idx].T
+        samples = reader.get_chain(discard=800, flat=True, thin=100).T[
+            idx_trace].T
         chsize = len(samples)
         mls = m2l(samples[:,:3])
         ml = np.percentile(mls, 50)
@@ -87,7 +92,14 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
         samples_kroupa = np.copy(samples)
         samples_kroupa[:, 0] = 1.3
         mlk = m2l(samples_kroupa[:,:3])
+        samples_salpeter = np.copy(samples)
+        samples_salpeter[:, 0] = 1.35
+        mlsalp = m2l_un(samples_salpeter[:,:3])
         alphas = mls / mlk
+        alphas_salp = mlsalp / mlk
+        a = np.median(alphas)
+        b = np.median(alphas_salp)
+        print(a, b)
         alpha = np.percentile(alphas, 50)
         t["alpha"] = [alpha]
         t["alpha_lerr"] = [alpha - np.percentile(alphas, 16)]
