@@ -7,6 +7,7 @@ Author : Carlos Eduardo Barbosa
 
 """
 import os
+import itertools
 
 import numpy as np
 from astropy.table import Table
@@ -19,31 +20,57 @@ from matplotlib.patches import Ellipse
 
 import context
 
-def plot_profiles(t, output, xfield, yfields, redo=False):
-    if os.path.exists(output) and not redo:
-        return
+def plot_profiles(t, xfield, yfields, output=None, xfracs=None, yfracs=None,
+                  xlim=None, return_axis=False):
     global labels
-    fig = plt.figure(figsize=(context.fig_width, 6))
-    for i, field in enumerate(yfields):
-        yerr = [t["{}_lerr".format(field)], t["{}_uerr".format(field)]]
+    corr = Table.read(os.path.join(wdir, "fit_stats.fits"))
+    fig = plt.figure(figsize=(context.fig_width, 2. * len(yfields)))
+    xfracs = [0.2] * len(yfields) if xfracs is None else xfracs
+    yfracs = [0.2] * len(yfields) if yfracs is None else yfracs
+    xlim = [None, None] if xlim is None else xlim
+    gs = gridspec.GridSpec(len(yfields), 1, figure=fig)
+    gs.update(left=0.12, right=0.99, bottom=0.055, top=0.99, wspace=0.02,
+              hspace=0.02)
+    for i, yfield in enumerate(yfields):
+        print(yfield)
+        yerr = [t["{}_lerr".format(yfield)], t["{}_uerr".format(yfield)]]
         xerr = [t["{}_lerr".format(xfield)], t["{}_uerr".format(xfield)]]
-        ax = plt.subplot(len(yfields), 1, i+1)
+        ax = plt.subplot(gs[i])
         # ax.set_xscale("log")
-        ax.errorbar(t[xfield], t[field],
-                     yerr=yerr, xerr=xerr, fmt="o", ecolor="C0", mec="w",
+        ax.errorbar(t[xfield], t[yfield],
+                     yerr=yerr, xerr=xerr, fmt="o", ecolor="0.8", mec="w",
                     mew=0.5, elinewidth=0.5)
-        plt.ylabel(labels[field])
+        ax.set_xlim(xlim)
+        plt.ylabel(labels[yfield])
         if i+1 < len(yfields):
             ax.xaxis.set_ticklabels([])
+        # plot parameter correlations
+        idx = np.where((corr["param1"]==xfield) & (corr["param2"]==yfield))[0]
+        if idx:
+            a = float(corr["a"][idx])
+            b = float(corr["b"][idx])
+            ang = float(corr["ang"][idx])
+            print(xfield, yfield, a, b, ang)
+            xmin, xmax = ax.get_xlim()
+            ymin, ymax = ax.get_ylim()
+            xel = xmin + xfracs[i] * (xmax - xmin)
+            yel = ymin + yfracs[i] * (ymax - ymin)
+            ellipse = Ellipse((xel, yel), a, b, ang,
+                              facecolor="none", edgecolor="r", linestyle="--")
+            ax.text(xel - 0.03 * (xmax - xmin),
+                    yel - 0.02 * (ymax - ymin), "$1\sigma$", size=5.5,
+                    c="r")
+            ax.add_patch(ellipse)
+    if return_axis:
+        return gs
     plt.xlabel(labels[xfield])
-    plt.subplots_adjust(left=0.14, right=0.985, top=0.995, bottom=0.052,
-                        hspace=0.06)
-    for fmt in ["pdf", "png"]:
-        plt.savefig("{}.{}".format(output, fmt), dpi=250)
+    if output is not None:
+        for fmt in ["pdf", "png"]:
+            plt.savefig("{}.{}".format(output, fmt), dpi=250)
     plt.close()
 
-def plot_single(t, output, xfield, yfield, return_ax=False, label=None,
-                figsize=None):
+def plot_single(t, xfield, yfield, return_ax=True, label=None,
+                figsize=None, output=None):
     global labels
     figsize = (context.fig_width, 2.8) if figsize is None else figsize
     fig = plt.figure(figsize=figsize)
@@ -60,9 +87,11 @@ def plot_single(t, output, xfield, yfield, return_ax=False, label=None,
                         hspace=0.06)
     if return_ax:
         return ax
-    for fmt in ["pdf", "png"]:
-        plt.savefig("{}.{}".format(output, fmt), dpi=250)
+    if output is not None:
+        for fmt in ["pdf", "png"]:
+            plt.savefig("{}.{}".format(output, fmt), dpi=250)
     plt.close()
+    return
 
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
     new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
@@ -232,111 +261,329 @@ def plot_sarzi(t, figsize=(7.24, 2.5)):
     plt.close()
 
 def get_colors(R):
-    norm = matplotlib.colors.Normalize(vmin=0, vmax=max(R),
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=np.ceil(np.max(R)),
                                        clip=True)
     cmap = plt.get_cmap('Blues_r')
-    new_cmap = truncate_colormap(cmap, 0.0, 0.7)
+    new_cmap = truncate_colormap(cmap, 0.0, 0.8)
     mapper = cm.ScalarMappable(norm=norm, cmap=new_cmap)
     return mapper, np.array([(mapper.to_rgba(v)) for v in R])
 
 def plot_imf_relations(t, figsize=(7.24, 4.5)):
     global labels, wdir
     corr = Table.read(os.path.join(wdir, "fit_stats.fits"))
-    fig = plt.figure(figsize=figsize)
-    gs = gridspec.GridSpec(2, 3, figure=fig)
-    gs.update(left=0.05, right=0.91, bottom=0.07, top=0.99, wspace=0.03,
-              hspace=0.18)
+
     mapper, colors = get_colors(t["R"])
-    yfield = "imf"
-    ys = t[yfield]
-    yerrs =  np.array([t["{}_lerr".format(yfield)], t["{}_uerr".format(
-        yfield)]]).T
-    xlim = {"T": [None, None], "Z": [-0.2, 0.25], "alphaFe": [None, 0.45],
-            "NaFe": [None, 0.7], "sigma": [100, 400], "Re": [None, 1.2]}
-    xelf = {"T": 0.8, "Z": 0.75, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.5,
+    yfields= ["imf", "alpha"]
+    xlim = {"T": [None, None], "Z": [-0.2, 0.25], "alphaFe": [0, 0.45],
+            "NaFe": [None, 0.7], "sigma": [80, 380], "Re": [-0.1, 1.1]}
+    xelf1 = {"T": 0.8, "Z": 0.85, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.85,
             "Re": 0.3}
-    for i, xfield in enumerate(["T", "Z", "alphaFe", "NaFe", "sigma", "Re"]):
-        xs = t[xfield]
-        xerrs = np.array([t["{}_lerr".format(xfield)], t["{}_uerr".format(
-            xfield)]]).T
-        ax = plt.subplot(gs[i])
-        for x, y, xerr, yerr, c in zip(xs, ys, xerrs, yerrs, colors):
-            ax.errorbar(x, y, yerr=np.atleast_2d(yerr).T,
-                        xerr=np.atleast_2d(xerr).T, fmt="o",
-                        ecolor="0.8", mec="w", color=c,
-                        mew=0.5, elinewidth=0.5)
-        if i in [0,3]:
-            ax.set_ylabel(labels[yfield])
-        else:
-            ax.yaxis.set_ticklabels([])
-        ax.set_xlabel(labels[xfield])
-        ax.set_xlim(xlim[xfield])
-        ax.set_ylim(0.3, 3.2)
-        # plot parameter correlations
-        idx = np.where((corr["param1"]==xfield) & (corr["param2"]==yfield))[0]
-        if idx:
-            a = corr["a"][idx]
-            b = corr["b"][idx]
-            ang = corr["ang"][idx]
+    xelf2 = {"T": 0.8, "Z": 0.85, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.85,
+            "Re": 0.3}
+    xelfs = {"alpha" : xelf2, "imf": xelf1}
+    ylims = {"imf": (0.0, 3.5), "alpha": (0.5, 2.0)}
+    xfig = [["sigma", "Z", "alphaFe"], ["NaFe", "T", "Re"]]
+    yfields = ["imf", "alpha"]
+    for k, xfields in enumerate(xfig):
+        fig = plt.figure(figsize=figsize)
+        gs = gridspec.GridSpec(2, 3, figure=fig)
+        gs.update(left=0.058, right=0.91, bottom=0.07, top=0.99, wspace=0.03,
+                  hspace=0.05)
+        for i, (yfield, xfield) in enumerate(itertools.product(yfields,
+                                                               xfields)):
+            xs = t[xfield]
+            ys = t[yfield]
+            xerrs = np.array([t["{}_lerr".format(xfield)], t["{}_uerr".format(
+                xfield)]]).T
+            yerrs = np.array([t["{}_lerr".format(yfield)], t["{}_uerr".format(
+                yfield)]]).T
+            xelf = xelfs[yfield]
+            ax = plt.subplot(gs[i])
+            # ax.text(0.05, 0.95, "({})".format(letters[i]), transform=ax.transAxes,
+            #         fontsize=10, va='top')
+            for x, y, xerr, yerr, c in zip(xs, ys, xerrs, yerrs, colors):
+                ax.errorbar(x, y, yerr=np.atleast_2d(yerr).T,
+                            xerr=np.atleast_2d(xerr).T, fmt="o",
+                            ecolor="0.8", mec="w", color=c,
+                            mew=0.5, elinewidth=0.5)
+            if i in [0,3]:
+                ax.set_ylabel(labels[yfield])
+            else:
+                ax.yaxis.set_ticklabels([])
+            if i < 3:
+                ax.xaxis.set_ticklabels([])
+            else:
+                ax.set_xlabel(labels[xfield])
+            ax.set_xlim(xlim[xfield])
+            ax.set_ylim(ylims[yfield])
+            # plot parameter correlations
+            idx = np.where((corr["param1"]==xfield) & (corr["param2"]==yfield))[0]
+            if idx:
+                a = corr["a"][idx]
+                b = corr["b"][idx]
+                ang = corr["ang"][idx]
+                xmin, xmax = ax.get_xlim()
+                ymin, ymax = ax.get_ylim()
+                xel = xmin + xelf[xfield] * (xmax - xmin)
+                yel = ymin + 0.2 * (ymax - ymin)
+                ellipse = Ellipse((xel, yel), a, b, ang,
+                                  facecolor="none", edgecolor="r", linestyle="--")
+                ax.text(xel - 0.03 * (xmax - xmin),
+                        yel - 0.02 * (ymax - ymin), "$1\sigma$", size=5.5,
+                        c="r")
+                ax.add_patch(ellipse)
+            ####################################################################
+            # alpha relations for Kroupa and Salpeter
             xmin, xmax = ax.get_xlim()
-            ymin, ymax = ax.get_ylim()
-            xel = xmin + xelf[xfield] * (xmax - xmin)
-            yel = ymin + 0.2 * (ymax - ymin)
-            ellipse = Ellipse((xel, yel), a, b, ang,
-                              facecolor="none", edgecolor="r", linestyle="--")
-            ax.text(xel - 0.03 * (xmax - xmin),
-                    yel - 0.02 * (ymax - ymin), "$1\sigma$", size=5.5,
-                    c="r")
-            ax.add_patch(ellipse)
-        # Plot results from Parikh et al. (2018)
-        xtable = os.path.join(context.home, "tables/parikh2018_{}.txt".format(
-                              xfield))
-        if os.path.exists(xtable):
-            ytable = os.path.join(context.home,
-                                  "tables/parikh2018_{}.txt".format(yfield))
-            y = np.loadtxt(ytable).ravel()[::2]
-            x = np.loadtxt(xtable).ravel()[::2]
-            ax.plot(x, y, "x", c="C1", label="Parikh et al. (2018)")
-        stable = os.path.join(context.home,
-                 "tables/sarzi2017_{}_imf.csv".format(xfield))
-        if os.path.exists(stable):
-            x, y = np.loadtxt(stable, delimiter=",", unpack=True)
-            ax.plot(x, y, "-", c="C2", label="Sarzi et al. (2017)")
-            ax.plot(x[0], y[0], "o", c="C2", label=None)
-        if xfield == "Z":
-            z = np.linspace(-0.3, 0.2, 50)
-            # Martin-Navarro 2015
-            a = np.random.normal(3.1, 0.5, len(z))
-            b = np.random.normal(2.2, 0.1, len(z))
-            y = a * z[:, np.newaxis] + b
-            ax.plot(z, y.mean(axis=1), "-", c="C4",
-                    label="Martín-Navarro et al.(2015)")
-            ax.plot(z, np.percentile(y, 16, axis=1), "--", c="C4")
-            ax.plot(z, np.percentile(y, 84, axis=1), "--", c="C4")
-        if i == 5:
-            plt.legend(loc=3, frameon=False, )
+            if yfield == "alpha":
+                ax.axhline(y=1, c="k", ls="--", lw=0.5)
+                ax.axhline(y=1.55, c="k", ls="--", lw=0.5)
+                if i == 3:
+                    ax.text(xmin + 0.04 * (xmax - xmin), 1.03, "Kroupa",
+                            size=5.5, c="k")
+                    ax.text(xmin + 0.04 * (xmax - xmin), 1.58, "Salpeter",
+                            size=5.5, c="k")
+            ####################################################################
+            add_literature_results(ax, xfield, yfield)
+            plt.legend(loc=3, frameon=False, prop={"size": 5})
 
 
-    cax = inset_axes(ax,  # here using axis of the lowest plot
-                       width="10%",  # width = 5% of parent_bbox width
-                       height="180%",  # height : 340% good for a (4x4) Grid
-                       loc='lower left',
-                       bbox_to_anchor=(1.05, 0.25, 1, 1),
-                       bbox_transform=ax.transAxes,
-                       borderpad=0)
-    cbar = fig.colorbar(mapper, cax=cax, orientation="vertical")
-    cbar.set_label("R (kpc)")
-    output = os.path.join(wdir, "plots/imf_relations")
-    print(output)
-    for fmt in ["pdf", "png"]:
-        plt.savefig("{}.{}".format(output, fmt), dpi=300)
-    plt.close()
+        cax = inset_axes(ax,  # here using axis of the lowest plot
+                           width="10%",  # width = 5% of parent_bbox width
+                           height="180%",  # height : 340% good for a (4x4) Grid
+                           loc='lower left',
+                           bbox_to_anchor=(1.05, 0.25, 1, 1),
+                           bbox_transform=ax.transAxes,
+                           borderpad=0)
+        cbar = fig.colorbar(mapper, cax=cax, orientation="vertical")
+        cbar.set_label("R (kpc)")
+        output = os.path.join(wdir, "plots/imf_relations")
+        print(output)
+        for fmt in ["pdf", "png"]:
+            plt.savefig("{}_{}.{}".format(output, k+1, fmt), dpi=300)
+        plt.close()
+
+def plot_imf_individual(t, figsize=(3.54, 4.5)):
+    global labels, wdir
+    corr = Table.read(os.path.join(wdir, "fit_stats.fits"))
+    mapper, colors = get_colors(t["R"])
+    xlim = {"T": [None, None], "Z": [-0.2, 0.25], "alphaFe": [0, 0.45],
+            "NaFe": [None, 0.7], "sigma": [80, 380], "Re": [-0.1, 1.1],
+            "logSigma": [None, 11]}
+    xelf1 = {"T": 0.8, "Z": 0.85, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.85,
+            "Re": 0.3, "logSigma": 0.8}
+    xelf2 = {"T": 0.8, "Z": 0.85, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.85,
+            "Re": 0.3, "logSigma": 0.85}
+    xelfs = {"alpha" : xelf2, "imf": xelf1}
+    ylims = {"imf": (0.5, 3.6), "alpha": (0.5, 2.2)}
+    xfields= ["sigma", "Z", "alphaFe", "NaFe", "T", "Re", "logSigma"]
+    yfields = ["imf", "alpha"]
+    for k, xfield in enumerate(xfields):
+        fig = plt.figure(figsize=figsize)
+        gs = gridspec.GridSpec(2, 1, figure=fig)
+        gs.update(left=0.11, right=0.985, bottom=0.07, top=0.99, wspace=0.03,
+                  hspace=0.05)
+        for i, yfield in enumerate(yfields):
+            xs = t[xfield]
+            ys = t[yfield]
+            xerrs = np.array([t["{}_lerr".format(xfield)],
+                              t["{}_uerr".format(xfield)]]).T
+            yerrs = np.array([t["{}_lerr".format(yfield)],
+                              t["{}_uerr".format(yfield)]]).T
+            xelf = xelfs[yfield]
+            ax = plt.subplot(gs[i])
+            for x, y, xerr, yerr, c in zip(xs, ys, xerrs, yerrs, colors):
+                ax.errorbar(x, y, yerr=np.atleast_2d(yerr).T,
+                            xerr=np.atleast_2d(xerr).T, fmt="o",
+                            ecolor="0.8", mec="w", color=c,
+                            mew=0.5, elinewidth=0.5)
+            ax.set_ylabel(labels[yfield])
+            if i == 0:
+                ax.xaxis.set_ticklabels([])
+            else:
+                ax.set_xlabel(labels[xfield])
+            ax.set_xlim(xlim[xfield])
+            ax.set_ylim(ylims[yfield])
+            # plot parameter correlations
+            idx = np.where((corr["param1"] == xfield) & (corr["param2"] == yfield))[
+                0]
+            if idx:
+                a = corr["a"][idx]
+                b = corr["b"][idx]
+                ang = corr["ang"][idx]
+                xmin, xmax = ax.get_xlim()
+                ymin, ymax = ax.get_ylim()
+                xel = xmin + xelf[xfield] * (xmax - xmin)
+                yel = ymin + 0.2 * (ymax - ymin)
+                ellipse = Ellipse((xel, yel), a, b, ang,
+                                  facecolor="none", edgecolor="0.3",
+                                  linestyle="--")
+                ax.text(xel - 0.02 * (xmax - xmin),
+                        yel - 0.02 * (ymax - ymin), "$1\sigma$", size=5.5,
+                        c="0.3")
+                ax.add_patch(ellipse)
+            ####################################################################
+            # alpha values for Kroupa and Salpeter
+            xmin, xmax = ax.get_xlim()
+            if yfield == "alpha":
+                ax.axhline(y=1, c="k", ls="--", lw=0.5)
+                ax.axhline(y=1.55, c="k", ls="--", lw=0.5)
+                if i == 1:
+                    ax.text(xmin + 0.04 * (xmax - xmin), 1.03, "Kroupa",
+                            size=5.5, c="k")
+                    ax.text(xmin + 0.04 * (xmax - xmin), 1.58, "Salpeter",
+                            size=5.5, c="k")
+            ####################################################################
+            add_literature_results(ax, xfield, yfield)
+            plt.legend(loc=2, frameon=False, prop={"size": 6}, ncol=2)
+        cbar_pos=[0.16, 0.12, 0.25, 0.025]
+        cbaxes = fig.add_axes(cbar_pos)
+        cbar = plt.colorbar(mapper, cax=cbaxes, orientation="horizontal")
+        cbar.set_ticks(np.linspace(0, 16, 5))
+        # cbar.ax.tick_params(labelsize=labelsize-1)
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.ax.xaxis.set_ticks_position('bottom')
+        # cl = plt.getp(cbar.ax, 'ymajorticklabels')
+        # plt.setp(cl, fontsize=labelsize+2)
+        cbar.set_label("R (kpc)")
+        output = os.path.join(wdir, "plots/imf_{}".format(xfield))
+        for fmt in ["pdf", "png"]:
+            plt.savefig("{}.{}".format(output, fmt), dpi=300)
+        plt.close()
+
+def add_literature_results(ax, xfield, yfield, posacki=False,
+                           mcdermid=False, labarbera=True, ferreras=False):
+    global labels
+    xmin, xmax = ax.get_xlim()
+    ####################################################################
+    # Plot results from Parikh et al. (2018)
+    xtable = os.path.join(context.home,
+                          "tables/parikh2018_{}.txt".format(xfield))
+    if os.path.exists(xtable) and yfield == "imf":
+        ytable = os.path.join(context.home,
+                              "tables/parikh2018_{}.txt".format(yfield))
+        y = np.loadtxt(ytable).ravel()[::2].reshape(3, 10)
+        x = np.loadtxt(xtable).ravel()[::2].reshape(3, 10)
+        colors = ["lightgreen", "limegreen", "green"]
+        for j in range(3):
+            lparikh = "Parikh et al. (2018)" if (j == 2) else \
+                None
+            ax.plot(x[j], y[j], "o", c=colors[j], label=lparikh, mec="w")
+            ax.plot(x[j][0], y[j][0], "o", c=colors[j], label=None, mec="k")
+    ####################################################################
+    # Sarzi et al. 2017
+    stable = os.path.join(context.home,
+                          "tables/sarzi2017_{}_imf.csv".format(xfield))
+    if os.path.exists(stable) and yfield == "imf":
+        x, y = np.loadtxt(stable, delimiter=",", unpack=True)
+        lsarzi = "Sarzi et al. (2017)"  # if i==5 else None
+        ax.plot(x, y, "-", c="r", label=None)
+        ax.plot(x[0], y[0], "o-", c="r", label=lsarzi)
+        ax.plot(x[0], y[0], "o-", c="r", label=None, mec="k")
+    ####################################################################
+    if xfield == "Z" and yfield == "imf":
+        z = np.linspace(-0.3, 0.2, 50)
+        # Martin-Navarro 2015
+        a = np.random.normal(3.1, 0.5, len(z))
+        b = np.random.normal(2.2, 0.1, len(z))
+        y = a * z[:, np.newaxis] + b
+        ax.plot(z, y.mean(axis=1), "-", c="C4",
+                label="Martín-Navarro et al.(2015)")
+        # ax.plot(z, np.percentile(y, 16, axis=1), "--", c="C4")
+        # ax.plot(z, np.percentile(y, 84, axis=1), "--", c="C4")
+    # velocity dispersion relation
+    if yfield == "imf" and xfield == "sigma":
+        sigma = np.linspace(100, 300, 100)
+        gamma = 2.4 + 5.4 * np.log10(sigma/200)
+        ax.plot(sigma, gamma, "--", c="violet", 
+                label="La Barbera et al. (2013)")
+    ####################################################################
+    # van Dokkum 2016
+    if yfield == "alpha" and xfield == "Re":
+        re = np.linspace(0, 1, 100)
+        alpha_vd = np.clip(2.48 - 3.6 * re, 1.1, np.infty)
+        ax.plot(re, alpha_vd, "-", c="coral",
+                label="van Dokkum et al. (2016)")
+    ####################################################################
+    # Posacki et al (2015)
+    if yfield == "alpha" and xfield == "sigma" and posacki:
+        sigma = np.linspace(xmin, xmax, 100)
+        p0 = np.random.normal(0.4, 0.15, 100)
+        p1 = np.random.normal(0.49, 0.05, 100)
+        p3 = np.random.normal(-0.07, 0.01, 100)
+        s = np.log10(sigma / 200)
+        loga = np.outer(p0, s ** 2) + np.outer(p1, s) + p3[:, np.newaxis]
+        apos = np.power(10, loga)
+        ax.fill_between(sigma, 1.55 * np.percentile(apos, 16, axis=0),
+                        1.55 * np.percentile(apos, 84, axis=0),
+                        color="0.8", label="Posacki et al. (2015)")
+    ####################################################################
+    # Barber et al (2019)
+    if yfield == "alpha" and xfield == "alphaFe":
+        x = np.array([-0.4, 0.2])
+        y = np.array([2, 0.8])
+        ax.plot(x + 0.18, y, "-", c="gold", label="LoM - Barber et al. (2019)")
+        x = np.array([0, 0.4])
+        y = [1.1, 1.3]
+        ax.plot(x + 0.18, y, "-", c="orange", label="HiM - Barber et al. ("
+                                                    "2019)")
+    ############################################################################
+    # McDermid et al. (2014)
+    if yfield == "alpha" and xfield in ["alphaFe", "Z", "T"] and mcdermid:
+        if xfield == "alphaFe":
+            x = np.linspace(-0.05, 0.45, 100)
+            a = -0.257
+            b = 0.71
+            eps = 0.07
+            xp = x
+        elif xfield == "T":
+            x = np.linspace(0.3, 1.2, 100)
+            a = -0.237
+            b = 0.126
+            eps = 0.069
+            xp = np.power(10, x)
+        elif xfield == "Z":
+            x = np.linspace(-0.3, 0.3)
+            a = -0.1181
+            b = -0.13
+            xp = x
+            eps = 0.07
+        ax.plot(xp, 1.55 * np.power(10, (a + b * x)), "-",
+                c="olive", lw=0.7, label="McDermid et al. (2014)")
+        ax.plot(xp, 1.55 * np.power(10, (a + b * x - eps)), "--",
+                c="olive", lw=0.7)
+        ax.plot(xp, 1.55 * np.power(10, (a + b * x + eps)), "--",
+                c="olive", lw=0.7)
+    ############################################################################
+    if yfield == "alpha" and xfield == "sigma":
+        sigma = np.linspace(150, 400, 100)
+        aa = [1.31, 0.9, 1.05]
+        bb = [-3.1, -2.2, -2.5]
+        cc = ["lightblue", "turquoise", "goldenrod"]
+        ll = ["Treu et al. (2010)", "Conroy et al. (2012)",
+              "Spiniello et al. (2014)"]
+        for a, b, l, c in zip(aa, bb, ll, cc):
+            y = np.power(10, a * np.log10(sigma) + b) * 1.54
+            ax.plot(sigma, y, "--", c=c, label=l)
+    if xfield == "logSigma":
+        x = np.linspace(-1, 1, 100)
+        if yfield == "imf":
+            y = 1.3 + 1.84 / (1 + np.exp(-x / 0.24))
+        else:
+            y = 1. + 0.98 / (1 + np.exp(-x / 0.24))
+        ax.plot(x + 10, y, "-", c="green", label="La Barbera et al. (2019)")
+
+    return
+
+
 
 if __name__ == "__main__":
     labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma_*$ (km/s)",
               "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
               "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]",
-              "Re" : "$R / R_e$"}
+              "Re" : "$R / R_e$",  "M2L": "$M_*/L_r$",
+              "alpha": "$\\alpha=(M_*/L_r) / (M_*/L_r)_{\\rm MW}$",
+              "logSigma": "$\\log \\Sigma$ (M$_\\odot$ / kpc$^2$)"}
     dataset = "MUSE"
     targetSN = 250
     wdir =  os.path.join(context.data_dir, dataset, "voronoi",
@@ -346,30 +593,30 @@ if __name__ == "__main__":
     # Loading and preparing data
     tfile = os.path.join(wdir, "results.fits")
     t = Table.read(tfile)
-    # t["sigma_lerr"] = t["sigmaerr"]
-    # t["sigma_uerr"] = t["sigmaerr"]
-    # t["V_lerr"] = t["Verr"]
-    # t["V_uerr"] = t["Verr"]
     t["R_uerr"] = 0
     t["R_lerr"] = 0
     t["Re"] = t["R"] / 8.4
     t["Re_uerr"] = 0
     t["Re_lerr"] = 0
-    # t["sigma"] = np.where(t["sigma"] < 500, t["sigma"], np.nan)
     ############################################################################
-    plot_imf_relations(t)
+    profiles = False
+    if profiles:
+        plot_profiles(t, "R", ["imf", "M2L", "alpha"],
+                      output=os.path.join(outdir, "R_imf-M2L-alpha"))
+        plot_profiles(t, "Re", ["imf", "M2L", "alpha"],
+                      output=os.path.join(outdir, "Re_imf-M2L-alpha"),
+                      xlim=[None, 1.1])
+        xfracs = [0.75, 0.75, 0.25]
+        yfracs = [0.2, 0.2, 0.7]
+        plot_profiles(t, "logSigma", ["imf", "M2L", "alpha"],
+                      output=os.path.join(outdir, "logSigma_imf-M2L-alpha"),
+                      xfracs=xfracs, yfracs=yfracs)
+        xfracs = [0.85, 0.85, 0.85]
+        yfracs = [0.3, 0.3, 0.3]
+        plot_profiles(t, "sigma", ["imf", "M2L", "alpha"],
+                      output=os.path.join(outdir, "sigma_imf-M2L-alpha"),
+                      xfracs=xfracs, yfracs=yfracs)
     ############################################################################
-    # output = os.path.join(outdir, "radial_profiles")
-    # plot_profiles(t, output, "R",
-    #               ["T", "Z", "imf", "alphaFe", "NaFe", "sigma"], redo=True)
-    # ###########################################################################
-    # output = os.path.join(outdir, "sigma_profiles")
-    # plot_profiles(t, output, "sigma", ["imf", "Z", "T", "alphaFe", "NaFe"],
-    #               redo=True)
-    # ############################################################################
-    # output = os.path.join(outdir, "metal_imf")
-    # plot_single(t, output, "Z", "imf")
-    # plt.close()
-    # plot_sigma_imf(t)
-    # plt.close()
-    # plot_sarzi(t)
+    # plot_imf_relations(t)
+    plot_imf_individual(t)
+    ############################################################################
