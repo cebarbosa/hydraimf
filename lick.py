@@ -72,10 +72,6 @@ class Lick():
 
             Im (array):
                 Indices measured in magnitudes.
-
-            classic (array):
-                Indices measured according to the conventional
-                units mixturing equivalent widths and magnitudes.
         """
         if hasattr(wave, "unit"):
             wave = wave.to(u.AA).value
