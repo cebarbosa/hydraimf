@@ -53,7 +53,7 @@ class PlotVoronoiMaps():
         self.coords = SkyCoord(context.ra0, context.dec0)
         self.D = context.D * u.Mpc
 
-    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.8),
+    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.95),
              arrows=True, sigma=None, xloc=None):
         """ Make the plots. """
         xloc = len(self.columns) * [-4] if xloc is None else xloc
@@ -63,7 +63,7 @@ class PlotVoronoiMaps():
             print(col)
             fig = plt.figure(figsize=figsize)
             gs = gridspec.GridSpec(1,1)
-            gs.update(left=0.09, right=0.995, bottom=0.085, top=0.995)
+            gs.update(left=0.09, right=0.99, bottom=0.085, top=0.995)
             ax = plt.subplot(gs[0])
             ax.set_facecolor("0.85")
             plt.minorticks_on()
@@ -133,15 +133,15 @@ class PlotVoronoiMaps():
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((-10.5, -11.5), 8.8, 3.1, alpha=1,
+                plt.gca().add_patch(Rectangle((3, -11.3), 8.5, 3.1, alpha=1,
                                               zorder=10, edgecolor="w",
                                               linewidth=1, facecolor="w"))
                 self.draw_colorbar(fig, ax, m, orientation="horizontal",
-                                   cbar_pos=[0.65, 0.135, 0.3, 0.05],
+                                   cbar_pos=[0.14, 0.15, 0.3, 0.05],
                                    ticks=np.linspace(vmin, vmax, 4),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
-                ax.text(xloc[j], -9.15, self.labels[j], zorder=11)
+                ax.text(xloc[j]+12.5, -8.8, self.labels[j], zorder=11)
             for fmt in ["pdf", "png"]:
                 output = os.path.join(self.outdir,
                          "{}_sn{}.{}".format(col, self.targetSN, fmt))
@@ -209,6 +209,8 @@ def make_table(targetSN=250, dataset="MUSE", update=False):
         sn_table = Table.read(os.path.join(wdir, "measured_sn.fits"))
         results = hstack([geom, sn_table])
         results.rename_column("SN/Ang", "SNR")
+        m2l_table = Table.read(os.path.join(wdir, "mass2light.fits"))
+        results = join(results, m2l_table, keys="BIN")
         # Adding stellar population table
         mcmc_dir = os.path.join(wdir, "EMCEE")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
@@ -230,22 +232,29 @@ def make_maps(results, targetSN=250, dataset="MUSE"):
     outdir = os.path.join(wdir, "plots")
     if not os.path.exists(outdir):
         os.mkdir(outdir)
-    fields = ["SNR", "Z", "T", "imf", "alphaFe", "NaFe", "Av", "sigma"]
+    fields = ["SNR", "Z", "T", "imf", "alphaFe", "NaFe", "Av", "sigma",
+              "M2L", "alpha", "logSigma"]
     labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
               "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$",
-              "$\sigma_*$ (km/s)"]
-    cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f", "%i"]
+              "$\sigma_*$ (km/s)", "$M_*/L_r$",
+              "$\\alpha$",
+              "$\\log \\Sigma$ (M$_\\odot$ / kpc$^2$)"]
+    cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f", "%i",
+               "%.1f", "%.2f", "%.2f"]
     lims = [[None, None], [-.1, 0.2], [6, 14], [1.3, 2.3],
-            [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None]]
-    xloc = [-4, -5.5, -4.5, -6., -5.5, -5, -6, -4.5]
+            [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None], [None, None],
+            [None, None], [None, None]]
+    xloc = [-4, -4.5, -4, -5.0, -4.5, -4, -5, -3.5, -4.5, -5, -2.5]
     cmaps = ["viridis"] * len(xloc)
-    pvm = PlotVoronoiMaps(results, fields, outdir,
+    idx = 0
+    pvm = PlotVoronoiMaps(results, fields[idx:], outdir,
                           targetSN=targetSN, #lims=lims,
-                          labels=labels, cb_fmts=cb_fmts, cmaps=cmaps)
+                          labels=labels[idx:], cb_fmts=cb_fmts[idx:],
+                          cmaps=cmaps[idx:])
 
-    xylims = [[11, -11], [-12, 12]]
-    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc)
+    xylims = [[12, -9.5], [-12, 12]]
+    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc[idx:])
 
 if __name__ == "__main__":
-    results = make_table(update=False)
+    results = make_table(update=True)
     make_maps(results)
