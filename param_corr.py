@@ -20,7 +20,7 @@ import emcee
 from tqdm import tqdm
 
 import context
-from run_painbox import build_sed_model
+from run_paintbox import build_sed_model
 
 def calc_correlations(targetSN=250, dataset="MUSE"):
     wdir = os.path.join(context.data_dir, dataset,

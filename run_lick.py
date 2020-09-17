@@ -200,8 +200,8 @@ def run_m87(targetSN=500, velscale=None, sigma=410, nsim=200, w1=4500,
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     for j, fyaml in enumerate(yamls):
-        output = os.path.join(outdir, fyaml.replace(".yaml", "_nsim{"
-                              "}{}.fits".format(nsim, sigma_str)))
+        output = os.path.join(outdir, fyaml.replace(".yaml",
+                              "_nsim{}{}.fits".format(nsim, sigma_str)))
         if os.path.exists(output) and not redo:
             continue
         print("Working with file {} ({}/{})".format(fyaml, j + 1,

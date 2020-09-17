@@ -241,7 +241,7 @@ def prepare_wifis():
     w2 = 13200
     velscale = 200 # km / s
     starttime = datetime.now()
-    prepare_templates_emiles_muse(w1, w2, velscale, sample="test",
+    prepare_templates_emiles_muse(w1, w2, velscale, sample="all",
                                   redo=False, fwhm=2.5, instrument="wifis")
     endtime = datetime.now()
     print("The program took {} to run".format(endtime - starttime))
