@@ -405,9 +405,9 @@ def plot_imf_individual(t, figsize=(3.54, 4.5)):
             ax.set_xlim(xlim[xfield])
             ax.set_ylim(ylims[yfield])
             # plot parameter correlations
-            idx = np.where((corr["param1"] == xfield) & (corr["param2"] == yfield))[
-                0]
-            if idx:
+            idx = np.where((corr["param1"] == xfield) &
+                           (corr["param2"] == yfield))[0]
+            if len(idx) > 0:
                 a = corr["a"][idx]
                 b = corr["b"][idx]
                 ang = corr["ang"][idx]
@@ -468,8 +468,8 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
         for j in range(3):
             lparikh = "Parikh et al. (2018)" if (j == 2) else \
                 None
-            ax.plot(x[j], y[j], "o", c=colors[j], label=lparikh, mec="w")
-            ax.plot(x[j][0], y[j][0], "o", c=colors[j], label=None, mec="k")
+            ax.plot(x[j], y[j], "s", c=colors[j], label=lparikh, mec="w")
+            ax.plot(x[j][0], y[j][0], "s", c=colors[j], label=None, mec="k")
     ####################################################################
     # Sarzi et al. 2017
     stable = os.path.join(context.home,
