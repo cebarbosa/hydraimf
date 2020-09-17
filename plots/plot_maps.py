@@ -53,8 +53,8 @@ class PlotVoronoiMaps():
         self.coords = SkyCoord(context.ra0, context.dec0)
         self.D = context.D * u.Mpc
 
-    def plot(self, xylims=None, cbbox="regular", figsize=(3.54, 3.95),
-             arrows=True, sigma=None, xloc=None):
+    def plot(self, xylims=None, cbbox="regular", figsize=(2.8, 3),
+             arrows=True, sigma=None, xloc=None, scale=1):
         """ Make the plots. """
         xloc = len(self.columns) * [-4] if xloc is None else xloc
         if xylims is None:
@@ -63,7 +63,8 @@ class PlotVoronoiMaps():
             print(col)
             fig = plt.figure(figsize=figsize)
             gs = gridspec.GridSpec(1,1)
-            gs.update(left=0.09, right=0.99, bottom=0.085, top=0.995)
+            gs.update(left=0.11, right=0.99, bottom=0.11, top=0.995)
+
             ax = plt.subplot(gs[0])
             ax.set_facecolor("0.85")
             plt.minorticks_on()
@@ -128,20 +129,20 @@ class PlotVoronoiMaps():
                 plt.gca().add_patch(Rectangle((14, -13), 9.5, 18, alpha=1,
                                               zorder=10, color="w"))
                 self.draw_colorbar(fig, ax, m, orientation="vertical",
-                                   cbar_pos=[0.24, 0.365, 0.05, 0.3],
+                                   cbar_pos=[0.25, 0.365, 0.05, 0.3],
                                    ticks=np.linspace(vmin, vmax, 5),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
             elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((3, -11.3), 8.5, 3.1, alpha=1,
+                plt.gca().add_patch(Rectangle((2.25, -11.3), 9.2, 3.8, alpha=1,
                                               zorder=10, edgecolor="w",
                                               linewidth=1, facecolor="w"))
                 self.draw_colorbar(fig, ax, m, orientation="horizontal",
-                                   cbar_pos=[0.14, 0.15, 0.3, 0.05],
+                                   cbar_pos=[0.18, 0.18, 0.3, 0.05],
                                    ticks=np.linspace(vmin, vmax, 4),
                                    cblabel=self.labels[j],
                                    cb_fmt=self.cb_fmts[j])
-                ax.text(xloc[j]+12.5, -8.8, self.labels[j], zorder=11)
+                ax.text(xloc[j]+12.5, -8.4, self.labels[j], zorder=11)
             for fmt in ["pdf", "png"]:
                 output = os.path.join(self.outdir,
                          "{}_sn{}.{}".format(col, self.targetSN, fmt))
@@ -215,11 +216,18 @@ def make_table(targetSN=250, dataset="MUSE", update=False):
         mcmc_dir = os.path.join(wdir, "EMCEE")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
                 "results.fits")])
-        fields = [_.split("_")[0] for _ in tables]
-        stpop = [Table.read(os.path.join(mcmc_dir, _ )) for _ in tables]
+        stpop = []
+        for table in tables:
+            binnum = "_".join(table.split("_")[0:4:2])
+            tt = Table.read(os.path.join(mcmc_dir, table))
+            newt = Table()
+            newt["BIN"] = [binnum]
+            for t in tt:
+                newt[t["param"]] = [t["median"]]
+                newt["{}_lerr".format(t["param"])] = [t["lerr"]]
+                newt["{}_uerr".format(t["param"])] = [t["uerr"]]
+            stpop.append(newt)
         stpop = vstack(stpop)
-        stpop["BIN"] = ["{}_{}".format(x,y) for x,y in zip(fields,
-                                                           stpop["BIN"])]
         results = join(results, stpop, keys="BIN")
         results.write(results_table, overwrite=True)
     else:
@@ -253,7 +261,8 @@ def make_maps(results, targetSN=250, dataset="MUSE"):
                           cmaps=cmaps[idx:])
 
     xylims = [[12, -9.5], [-12, 12]]
-    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc[idx:])
+    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc[idx:],
+             scale=0.8)
 
 if __name__ == "__main__":
     results = make_table(update=True)
