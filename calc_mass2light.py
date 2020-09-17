@@ -24,7 +24,7 @@ from scipy.stats.distributions import chi2
 from scipy.stats import pearsonr
 
 import context
-from run_painbox import build_sed_model
+from run_paintbox import build_sed_model
 
 class Mass2Light:
     def __init__(self, imf="bi"):
