@@ -58,9 +58,9 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
         limits[param] = (vmin, vmax)
     logwave = Table.read(templates_file, hdu=2)["loglam"].data
     twave = np.exp(logwave)
-    ssp = pb.StPopInterp(twave, params, templates)
+    ssp = pb.ParametricModel(twave, params, templates)
     # Using interpolation routine to get normalization
-    norm = pb.StPopInterp(np.ones(1), params, tnorm) if nssps > 1 else None
+    norm = pb.ParametricModel(np.ones(1), params, tnorm) if nssps > 1 else None
     if nssps > 1:
         for i in range(nssps):
             w = pb.Polynomial(twave, 0)
@@ -96,8 +96,8 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     emnorm = emission_lines.max(axis=1)
     emission_lines /= emnorm[:, None]
     emission = pb.Rebin(wave,
-                         pb.LOSVDConv(pb.EmissionLines(emwave, emission_lines,
-                         line_names), velscale=velscale_gas))
+                         pb.LOSVDConv(pb.NonParametricModel(emwave, emission_lines,
+                                                            line_names), velscale=velscale_gas))
     emission.parnames[-1] = "sigma_gas"
     emission.parnames[-2] = "V_gas"
     # Adding a polynomial
@@ -109,7 +109,7 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     fsky = fits.getdata(sky_templates_file, hdu=1)
     snames = Table.read(sky_templates_file, hdu=2)["skylines"].data
     snames = ["sky" + re.sub(r"[\(\)$\-\_]", "", _.decode()) for _ in snames]
-    sky = pb.Rebin(wave, pb.EmissionLines(wsky, fsky, snames))
+    sky = pb.Rebin(wave, pb.NonParametricModel(wsky, fsky, snames))
     # Creating a model including LOSVD
     sed = (stars * poly) + sky + emission
     # Setting properties that may be useful later in modeling
@@ -446,11 +446,11 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None,
     ax.set_ylabel("$\Delta f_\lambda$")
     ax.set_xlim(4700, 9400)
     plt.legend(loc=3)
-    plt.subplots_adjust(left=0.08, right=0.995, hspace=0.02, top=0.99,
+    plt.subplots_adjust(left=0.06, right=0.995, hspace=0.02, top=0.99,
                         bottom=0.11)
     fig.align_ylabels(axs)
     plt.savefig("{}.png".format(outfig), dpi=250)
-    plt.show()
+    # plt.show()
     plt.close()
     return
 
@@ -606,7 +606,7 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
     print("Producing SED model...")
     sed, mw, sky = build_sed_model(wave, sample=sample, nssps=nssps,
                                  porder=porder)
-    for specname in specnames:
+    for specname in specnames[::-1]:
         print("Processing spectrum {}".format(specname))
         name = specname.split(".")[0]
         binnum = name.split("_")[2]
@@ -645,7 +645,7 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         if postprocessing:
             print("Producing corner plots...")
             title = "Spectrum {}".format(binnum)
-            plot_corner(ptrace_emcee, emcee_db, title=title, redo=False)
+            plot_corner(ptrace_emcee, emcee_db, title=title, redo=True)
             print("Producing fitting figure...")
             plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
                          redo=False, sky=sky, norm=norm)
