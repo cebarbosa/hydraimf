@@ -16,18 +16,19 @@ if __name__ == "__main__":
     data_dir = os.path.join(context.data_dir, "pbsim")
     sspmodel = "emiles"
     sample, nsim, sn = "all", 1000, 50
+    sampler = "emcee"
     simname = "{}_{}_nsim{}_sn{}".format(sspmodel, sample, nsim, sn)
     wdir = os.path.join(data_dir, simname)
     plots_dir = os.path.join(wdir, "plots")
     if not os.path.exists(plots_dir):
         os.mkdir(plots_dir)
     simulations = Table.read(os.path.join(wdir, "simulations.fits"))
-    zeus_dir = os.path.join(wdir, "zeus")
+    mcmc_dir = os.path.join(wdir, sampler)
     params = ["Z", "T", "alphaFe", "NaFe", 'imf', "Av", "V", "sigma"]
     fig = plt.figure(1, figsize=(7,4))
     gs = GridSpec(4, 2)
     for i, sim in tqdm(enumerate(simulations)):
-        db = os.path.join(zeus_dir, "{:04d}_chain.fits".format(i))
+        db = os.path.join(mcmc_dir, "{:04d}_chain.fits".format(i))
         if not os.path.exists(db):
             continue
         fit = Table.read(db)
@@ -51,6 +52,7 @@ if __name__ == "__main__":
         ax.set_xlabel(context.labels[p])
         ax.set_ylabel("$\Delta${}".format(context.labels[p]))
     plt.tight_layout()
-    plt.savefig(os.path.join(plots_dir, "sim_results_sn{}.png".format(sn)),
-                dpi=250)
-    plt.show()
+    plt.savefig(os.path.join(plots_dir, "sim_results_{}_sn{}.png".format(
+                sampler, sn)), dpi=250)
+    # plt.show()
+    plt.close()

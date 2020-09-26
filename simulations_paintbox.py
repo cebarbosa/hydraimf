@@ -11,6 +11,7 @@ from scipy import stats
 from astropy.table import Table
 from astropy.io import fits
 import ppxf.ppxf_util as util
+import emcee
 import zeus
 import paintbox as pb
 
@@ -108,7 +109,8 @@ def create_simulations(sed, limits, sn=50, nsim=1000, redo=False):
     hdulist.writeto(simfile, overwrite=True)
     return
 
-def run_zeus(sed, limits, loglike, db, redo=False, nsteps=1000):
+def run_sampler(sed, limits, loglike, db, redo=False, nsteps=1000,
+                sampler="zeus"):
     if os.path.exists(db) and not redo:
         return
     ndim = len(sed.parnames)
@@ -125,19 +127,26 @@ def run_zeus(sed, limits, loglike, db, redo=False, nsteps=1000):
         if not np.isfinite(lp) or np.isnan(lp):
             return -np.inf
         return loglike(theta)
-    sampler = zeus.sampler(nwalkers, ndim, log_probability)
-    sampler.run_mcmc(pos, nsteps)
-    chain = sampler.get_chain(flat=True, discard=nsteps // 2, thin=50)
+    if sampler == "zeus":
+        sampler = zeus.sampler(nwalkers, ndim, log_probability)
+        sampler.run_mcmc(pos, nsteps)
+        chain = sampler.get_chain(flat=True, discard=nsteps // 2, thin=50)
+    elif sampler == "emcee":
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
+        sampler.run_mcmc(pos, 1000, progress=True)
+        chain = sampler.get_chain(discard=nsteps // 2, flat=True, thin=50)
     table = Table(chain, names=sed.parnames)
     table.write(db, overwrite=True)
     return
 
-def fit_simulations(sed, limits, start=0, limitto=100):
+def fit_simulations(sed, limits, start=0, limitto=100, sampler="zeus"):
     specs = fits.getdata("simulations.fits")
     noise = fits.getdata("simulations.fits", extname="NOISE")
     zeus_dir = os.path.join(os.getcwd(), "zeus")
-    if not os.path.exists(zeus_dir):
-        os.mkdir(zeus_dir)
+    emcee_dir = os.path.join(os.getcwd(), "emcee")
+    for _dir in [zeus_dir, emcee_dir]:
+        if not os.path.exists(_dir):
+            os.mkdir(_dir)
     for i, flam in enumerate(specs):
         if i < start or i > start + limitto:
             continue
@@ -147,8 +156,9 @@ def fit_simulations(sed, limits, start=0, limitto=100):
         flam /= norm
         flamerr = np.full_like(flam, noise[i] / norm)
         loglike = pb.NormalLogLike(flam, sed, obserr=flamerr)
-        db = os.path.join(zeus_dir, "{}_chain.fits".format(name))
-        run_zeus(sed, limits, loglike, db)
+        db = os.path.join(os.getcwd(), sampler, "{}_chain.fits".format(name))
+        run_sampler(sed, limits, loglike, db, sampler=sampler)
+
 
 if __name__ == "__main__":
     data_dir = os.path.join(context.data_dir, "pbsim")
@@ -163,4 +173,4 @@ if __name__ == "__main__":
     wave = make_wave_array()
     sed, limits = build_sed_model(wave, sample=sample)
     create_simulations(sed, limits, nsim=nsim)
-    fit_simulations(sed, limits, start=100)
+    fit_simulations(sed, limits, start=0, sampler="emcee")
