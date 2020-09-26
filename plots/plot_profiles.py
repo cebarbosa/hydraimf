@@ -244,7 +244,7 @@ def plot_sarzi(t, figsize=(7.24, 2.5)):
             a = np.random.normal(3.1, 0.5, len(z))
             b = np.random.normal(2.2, 0.1, len(z))
             y = a * z[:, np.newaxis] + b
-            ax.plot(z, y.mean(axis=1), "-", c="C4",
+            ax.plot(z, y.mean(axis=1), "--", c="C4",
                     label="Martín-Navarro et al.(2015)")
             ax.plot(z, np.percentile(y, 16, axis=1), "--", c="C4")
             ax.plot(z, np.percentile(y, 84, axis=1), "--", c="C4")
@@ -260,10 +260,10 @@ def plot_sarzi(t, figsize=(7.24, 2.5)):
         plt.savefig("{}.{}".format(output, fmt), dpi=300)
     plt.close()
 
-def get_colors(R):
+def get_colors(R, cmapname="Blues_r"):
     norm = matplotlib.colors.Normalize(vmin=0, vmax=np.ceil(np.max(R)),
                                        clip=True)
-    cmap = plt.get_cmap('Blues_r')
+    cmap = plt.get_cmap(cmapname)
     new_cmap = truncate_colormap(cmap, 0.0, 0.8)
     mapper = cm.ScalarMappable(norm=norm, cmap=new_cmap)
     return mapper, np.array([(mapper.to_rgba(v)) for v in R])
@@ -468,8 +468,9 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
         for j in range(3):
             lparikh = "Parikh et al. (2018)" if (j == 2) else \
                 None
-            ax.plot(x[j], y[j], "s", c=colors[j], label=lparikh, mec="w")
-            ax.plot(x[j][0], y[j][0], "s", c=colors[j], label=None, mec="k")
+            ax.plot(x[j], y[j], "-", c=colors[j], label=None, mec="w")
+            ax.plot(x[j][0], y[j][0], "s-", c=colors[j], label=lparikh,
+                    mec=colors[j])
     ####################################################################
     # Sarzi et al. 2017
     stable = os.path.join(context.home,
@@ -478,8 +479,8 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
         x, y = np.loadtxt(stable, delimiter=",", unpack=True)
         lsarzi = "Sarzi et al. (2017)"  # if i==5 else None
         ax.plot(x, y, "-", c="r", label=None)
-        ax.plot(x[0], y[0], "o-", c="r", label=lsarzi)
-        ax.plot(x[0], y[0], "o-", c="r", label=None, mec="k")
+        ax.plot(x[0], y[0], "^-", c="r", label=lsarzi)
+        ax.plot(x[0], y[0], "^-", c="r", label=None, mec="r")
     ####################################################################
     if xfield == "Z" and yfield == "imf":
         z = np.linspace(-0.3, 0.2, 50)
@@ -487,7 +488,7 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
         a = np.random.normal(3.1, 0.5, len(z))
         b = np.random.normal(2.2, 0.1, len(z))
         y = a * z[:, np.newaxis] + b
-        ax.plot(z, y.mean(axis=1), "-", c="C4",
+        ax.plot(z, y.mean(axis=1), "--", c="C4",
                 label="Martín-Navarro et al.(2015)")
         # ax.plot(z, np.percentile(y, 16, axis=1), "--", c="C4")
         # ax.plot(z, np.percentile(y, 84, axis=1), "--", c="C4")
@@ -522,11 +523,14 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
     if yfield == "alpha" and xfield == "alphaFe":
         x = np.array([-0.4, 0.2])
         y = np.array([2, 0.8])
-        ax.plot(x + 0.18, y, "-", c="gold", label="LoM - Barber et al. (2019)")
+        # offset = 0.18 # offset to make it work
+        offset = 0
+        ax.plot(x + offset, y, "-", c="gold",
+                label="LoM - Barber et al. (2019)")
         x = np.array([0, 0.4])
         y = [1.1, 1.3]
-        ax.plot(x + 0.18, y, "-", c="orange", label="HiM - Barber et al. ("
-                                                    "2019)")
+        ax.plot(x + offset, y, "-", c="orange",
+                label="HiM - Barber et al. (2019)")
     ############################################################################
     # McDermid et al. (2014)
     if yfield == "alpha" and xfield in ["alphaFe", "Z", "T"] and mcdermid:
@@ -571,7 +575,7 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
             y = 1.3 + 1.84 / (1 + np.exp(-x / 0.24))
         else:
             y = 1. + 0.98 / (1 + np.exp(-x / 0.24))
-        ax.plot(x + 10, y, "-", c="green", label="La Barbera et al. (2019)")
+        ax.plot(x + 10, y, "-", c="brown", label="La Barbera et al. (2019)")
 
     return
 

@@ -47,8 +47,13 @@ def piecewise_linear_function2(x, x0, x1, x2, b, k1, k2, k3, k4, pkg=np):
     s4 = pkg.where(x >= x2, k4 * (x - x2), 0)
     return s1 + s2 + s3 + s4
 
-def plot_table(table, ypars, xpar="R", xlim=(0.3, 20), xscale="log"):
+def plot_table(table, ypars, xpar="R", xlim=(0.07, 20), xscale="log"):
     global labels
+    b16= Table.read(os.path.join(context.tables_dir, "barbosa16.fits"))
+    b16 = b16[b16["S_N"] >= 50]
+    b16["logT"] = np.log10(b16["Age"])
+    b16["e_logT"] = np.abs(b16["e_Age"] / b16["Age"] / np.log(10))
+    b16_fields = {"Z": "__Z_H_", "logT": "logT", "alphaFe": "__alpha_Fe_"}
     x = table[xpar]
     fig = plt.figure(figsize=(context.fig_width, 7))
     # Plot weights
@@ -91,16 +96,25 @@ def plot_table(table, ypars, xpar="R", xlim=(0.3, 20), xscale="log"):
         yupper = table["{}_uerr".format(p)].data
 
         ax.set_xscale(xscale)
+        label = "This work" if i ==0 else None
         ax.errorbar(x, y, yerr=[ylower, yupper], ecolor=None, fmt="o",
-                    mew=0.5, elinewidth=0.5, mec="w", ms=5, c="C0")
+                    mew=0.5, elinewidth=0.5, mec="w", ms=5, c="C0", label=label)
         ax.set_ylabel(labels[p])
         ax.set_xlim(xlim)
         ax.xaxis.set_ticklabels([])
-    plt.subplots_adjust(left=0.13, right=0.99, top=0.995, bottom=0.045,
+        if p in b16_fields:
+            label = "Barbosa et al. (2016)" if i==0 else None
+            ax.errorbar(b16["Rad"], b16[b16_fields[p]],
+                        yerr=b16["e_{}".format(b16_fields[p]).replace("___",
+                                                                      "__")],
+                        fmt="x", mew=0.5, label=label,
+                        elinewidth=0.5, ms=4.5, c="k")
+        plt.legend(frameon=False, prop={"size": 6})
+    plt.subplots_adjust(left=0.15, right=0.99, top=0.995, bottom=0.045,
                         hspace=0.06)
     out = os.path.join(wdir, "plots/ssp_gradients")
     for fmt in ["pdf", "png"]:
-        plt.savefig("{}.{}".format(out, fmt), dpi=200)
+        plt.savefig("{}.{}".format(out, fmt), dpi=250)
     plt.close()
     return
 

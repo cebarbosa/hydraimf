@@ -11,6 +11,8 @@ Project definitions
 import os
 import platform
 
+import matplotlib
+matplotlib.use('Qt4Agg') # MUST BE CALLED BEFORE IMPORTING plt
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
 import astropy.units as u
@@ -110,6 +112,11 @@ Av = ebv * Rv
 # observed velocities.
 vhelio = {"fieldA" : 24.77, "fieldB" : 21.26, "fieldC" : 20.80,
           "fieldD" : 19.09} # km / s
+
+labels = {"imf": r"$\Gamma_b$", "Z": "[Z/H]", "T": "Age (Gyr)",
+          "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]", "Av": "$A_V$",
+          "Rv": "$R_V$", "V": "$V_*$ (km/s)", "sigma": "$\sigma_*$ (km/s)",
+          "SNR": "SNR (\\r{A}$^{-1}$)", "m2l": "$M_*/L_r$"}
 
 # Matplotlib settings
 plt.style.context("seaborn-paper")

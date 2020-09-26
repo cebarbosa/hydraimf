@@ -75,7 +75,7 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
         pop = ssp
     # Adding extinction to the stellar populations
     extinction = pb.CCM89(twave)
-    stars = pb.Rebin(wave, pb.LOSVDConv(pop * extinction, velscale=velscale))
+    stars = pb.Resample(wave, pb.LOSVDConv(pop * extinction, velscale=velscale))
     # Loading templates for the emission lines
     velscale_gas = velscale / em_oversample
     logemwave = util.log_rebin([w1, w2], twave, velscale=velscale_gas)[1]
@@ -95,8 +95,8 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     emission_lines = emission_lines.T
     emnorm = emission_lines.max(axis=1)
     emission_lines /= emnorm[:, None]
-    emission = pb.Rebin(wave,
-                         pb.LOSVDConv(pb.NonParametricModel(emwave, emission_lines,
+    emission = pb.Resample(wave,
+                           pb.LOSVDConv(pb.NonParametricModel(emwave, emission_lines,
                                                             line_names), velscale=velscale_gas))
     emission.parnames[-1] = "sigma_gas"
     emission.parnames[-2] = "V_gas"
@@ -109,7 +109,7 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     fsky = fits.getdata(sky_templates_file, hdu=1)
     snames = Table.read(sky_templates_file, hdu=2)["skylines"].data
     snames = ["sky" + re.sub(r"[\(\)$\-\_]", "", _.decode()) for _ in snames]
-    sky = pb.Rebin(wave, pb.NonParametricModel(wsky, fsky, snames))
+    sky = pb.Resample(wave, pb.NonParametricModel(wsky, fsky, snames))
     # Creating a model including LOSVD
     sed = (stars * poly) + sky + emission
     # Setting properties that may be useful later in modeling
@@ -648,7 +648,7 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
             plot_corner(ptrace_emcee, emcee_db, title=title, redo=True)
             print("Producing fitting figure...")
             plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
-                         redo=False, sky=sky, norm=norm)
+                         redo=True  , sky=sky, norm=norm)
             print("Making summary table...")
             outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
             make_table(summary_trace, outtab)

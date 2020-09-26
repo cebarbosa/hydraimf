@@ -78,7 +78,7 @@ def calc_correlations(targetSN=250, dataset="MUSE"):
              "ang", "angerr", "p", "perr"]
     tab = Table([p1, p2, r, rsd, a, asd, b, bsd, ang, angsd, p, psd],
                 names=names)
-    tab.write(os.path.join(wdir, "fit_stats.fits"), overwrite=True)
+    tab.write(os.path.join(wdir, "fit_stats_only_sedpars.fits"), overwrite=True)
     # Make latex table
     labels = {"T": "Age (Gyr)", "Z": "[Z/H]", "alphaFe": "[$\\alpha$/Fe]",
               "NaFe": "[Na/Fe]", "sigma": "$\\sigma_*$ (km/s)", "imf":

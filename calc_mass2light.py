@@ -99,7 +99,7 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
         alphas_salp = mlsalp / mlk
         a = np.median(alphas)
         b = np.median(alphas_salp)
-        print(a, b)
+        # print(a, b)
         alpha = np.percentile(alphas, 50)
         t["alpha"] = [alpha]
         t["alpha_lerr"] = [alpha - np.percentile(alphas, 16)]
