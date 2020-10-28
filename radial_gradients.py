@@ -457,13 +457,13 @@ if __name__ == "__main__":
     labels = {"R": "$R$ (kpc)", "sigma": r"$\sigma_*$ (km/s)",
               "V": "$V$ (km/s)", "imf": r"$\Gamma_b$", "Z": "[Z/H]",
               "T": "Age (Gyr)", "alphaFe": r"[$\alpha$/Fe]", "NaFe": "[Na/Fe]",
-              "logT": "$\log $ Age (Gyr)"}
+              "logT": "$\log $ Age (Gyr)", "M2L": "$M_*/L_r$"}
     wdir = os.path.join(context.data_dir, "MUSE/voronoi/sn250")
     table = make_table(targetSN=250)
     table["logT"] = np.log10(table["T"].data)
     table["logT_lerr"] = np.abs(table["T_lerr"].data / table["T"] / np.log(10))
     table["logT_uerr"] = np.abs(table["T_uerr"].data / table["T"] / np.log(10))
-    params = ["logT", "Z", "alphaFe", "imf", "NaFe"]
+    params = ["logT", "Z", "alphaFe", "NaFe", "imf", "M2L"]
     r = table["R"].data
     x = np.log10(r)
     rm = np.linspace(r.min(), r.max(), 100)
