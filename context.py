@@ -10,9 +10,11 @@ Project definitions
 """
 import os
 import platform
+import getpass
 
-import matplotlib
-matplotlib.use('Qt4Agg') # MUST BE CALLED BEFORE IMPORTING plt
+if getpass.getuser() == "kadu":
+    import matplotlib
+    matplotlib.use('Qt4Agg') # MUST BE CALLED BEFORE IMPORTING plt
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
 import astropy.units as u
