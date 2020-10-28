@@ -21,6 +21,7 @@ import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
 from matplotlib.colorbar import Colorbar
 import scipy.ndimage as ndimage
+from tqdm import tqdm
 
 import context
 from geomfov import calc_extent, offset_extent, get_geom
@@ -54,16 +55,22 @@ class PlotVoronoiMaps():
         self.D = context.D * u.Mpc
 
     def plot(self, xylims=None, cbbox="regular", figsize=(2.8, 3),
-             arrows=True, sigma=None, xloc=None, scale=1):
+             arrows=True, sigma=None, xloc=None, sizes=None):
         """ Make the plots. """
+        sizes= ["onethird"] * len(self.columns) if sizes is None else sizes
+        figsize = {"onethird": (2.8, 3.1), "half": (3.54, 3.9)}
+        gsdict = {"onethird":
+                  {"left":0.115, "right":0.995, "bottom":0.105, "top":0.995},
+                  "half":
+                  {"left":0.1, "right":0.995, "bottom":0.09, "top":0.995}}
         xloc = len(self.columns) * [-4] if xloc is None else xloc
         if xylims is None:
             xylims = [(25, -10), (-25, 20)]
-        for j, col in enumerate(self.columns):
-            print(col)
-            fig = plt.figure(figsize=figsize)
+        for j, col in enumerate(tqdm(self.columns, desc="Producing maps")):
+            size = sizes[j]
+            fig = plt.figure(figsize=figsize[size])
             gs = gridspec.GridSpec(1,1)
-            gs.update(left=0.11, right=0.99, bottom=0.11, top=0.995)
+            gs.update(**gsdict[size])
 
             ax = plt.subplot(gs[0])
             ax.set_facecolor("0.85")
@@ -113,40 +120,27 @@ class PlotVoronoiMaps():
                 plt.text(-4.3, -12.5, "N", color="b", fontsize=10, va='top')
             ax.tick_params(axis="both",  which='major',
                            labelsize=context.MEDIUM_SIZE)
-            if cbbox == "zoom":
-                (x0, x1), (y0, y1) = xylims
-                xsize = x1 - x0
-                ysize = y1 - y0
-                plt.gca().add_patch(Rectangle((x0 + 0.05 * xsize, y0 + 0.22 * ysize),
-                                              0.25 * xsize, 0.48 * ysize,
-                                              alpha=1, zorder=10, color="w"))
-                self.draw_colorbar(fig, ax, m, orientation="vertical",
-                                   cbar_pos=[0.24, 0.365, 0.05, 0.3],
-                                   ticks=np.linspace(vmin, vmax, 5),
-                                   cblabel=self.labels[j],
-                                   cb_fmt=self.cb_fmts[j])
-            elif cbbox == "regular":
-                plt.gca().add_patch(Rectangle((14, -13), 9.5, 18, alpha=1,
-                                              zorder=10, color="w"))
-                self.draw_colorbar(fig, ax, m, orientation="vertical",
-                                   cbar_pos=[0.25, 0.365, 0.05, 0.3],
-                                   ticks=np.linspace(vmin, vmax, 5),
-                                   cblabel=self.labels[j],
-                                   cb_fmt=self.cb_fmts[j])
-            elif cbbox == "horizontal":
-                plt.gca().add_patch(Rectangle((2.25, -11.3), 9.2, 3.8, alpha=1,
-                                              zorder=10, edgecolor="w",
-                                              linewidth=1, facecolor="w"))
-                self.draw_colorbar(fig, ax, m, orientation="horizontal",
-                                   cbar_pos=[0.18, 0.18, 0.3, 0.05],
-                                   ticks=np.linspace(vmin, vmax, 4),
-                                   cblabel=self.labels[j],
-                                   cb_fmt=self.cb_fmts[j])
-                ax.text(xloc[j]+12.5, -8.4, self.labels[j], zorder=11)
+            ####################################################################
+            # Including colorbar
+            y0bar = 0.18 if size == "onethird" else 0.15
+            x0bar = 0.18 if size == "onethird" else 0.16
+            dyrec = 3.8 if size == "onethird" else 3.3
+            dxrec = 9.2 if size == "onethird" else 8.7
+            plt.gca().add_patch(Rectangle((2.25, -11.3), 9.2, dyrec, alpha=1,
+                                          zorder=10, edgecolor="w",
+                                          linewidth=1, facecolor="w"))
+            self.draw_colorbar(fig, ax, m, orientation="horizontal",
+                               cbar_pos=[x0bar, y0bar, 0.3, 0.05],
+                               ticks=np.linspace(vmin, vmax, 4),
+                               cblabel=self.labels[j],
+                               cb_fmt=self.cb_fmts[j])
+            ####################################################################
+            ytext = -8.4 if size == "onethird" else -8.8
+            ax.text(xloc[j]+12.5, ytext, self.labels[j], zorder=11)
             for fmt in ["pdf", "png"]:
                 output = os.path.join(self.outdir,
                          "{}_sn{}.{}".format(col, self.targetSN, fmt))
-                plt.savefig(output, dpi=250)
+                plt.savefig(output, dpi=350 )
             plt.clf()
             plt.close()
         return
@@ -213,7 +207,7 @@ def make_table(targetSN=250, dataset="MUSE", update=False):
         m2l_table = Table.read(os.path.join(wdir, "mass2light.fits"))
         results = join(results, m2l_table, keys="BIN")
         # Adding stellar population table
-        mcmc_dir = os.path.join(wdir, "EMCEE")
+        mcmc_dir = os.path.join(wdir, "EMCEE_normal2")
         tables = sorted([_ for _ in os.listdir(mcmc_dir) if _.endswith(
                 "results.fits")])
         stpop = []
@@ -244,15 +238,18 @@ def make_maps(results, targetSN=250, dataset="MUSE"):
               "M2L", "alpha", "logSigma"]
     labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
               "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$",
-              "$\sigma_*$ (km/s)", "$M_*/L_r$",
-              "$\\alpha$",
+              "$\sigma_*$ (km/s)", "$\\Upsilon_*^r$ ($M_\odot / L_\odot$)",
+              "$\\Upsilon_*^r / \\Upsilon_{*,{\\rm MW}}^{r}$",
               "$\\log \\Sigma$ (M$_\\odot$ / kpc$^2$)"]
     cb_fmts = ["%i", "%.2f", "%i", "%.1f", "%.2f", "%.2f", "%.2f", "%i",
                "%.1f", "%.2f", "%.2f"]
     lims = [[None, None], [-.1, 0.2], [6, 14], [1.3, 2.3],
-            [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None], [None, None],
+            [0.05, 0.20], [0.25, 0.5], [0, 0.05], [None, None], [None, 5],
             [None, None], [None, None]]
-    xloc = [-4, -4.5, -4, -5.0, -4.5, -4, -5, -3.5, -4.5, -5, -2.5]
+    sizes = ["half", "onethird", "onethird", "onethird", "onethird",
+             "onethird", "half", "onethird", "onethird", "onethird",
+             "onethird"]
+    xloc = [-4, -4.5, -4, -5.0, -4.5, -4, -5, -3.5, -3., -3.8, -2.2]
     cmaps = ["viridis"] * len(xloc)
     idx = 0
     pvm = PlotVoronoiMaps(results, fields[idx:], outdir,
@@ -261,8 +258,8 @@ def make_maps(results, targetSN=250, dataset="MUSE"):
                           cmaps=cmaps[idx:])
 
     xylims = [[12, -9.5], [-12, 12]]
-    pvm.plot(xylims=xylims, arrows=False, cbbox="horizontal", xloc=xloc[idx:],
-             scale=0.8)
+    pvm.plot(xylims=xylims, arrows=False, xloc=xloc[idx:],
+             sizes=sizes[idx:])
 
 if __name__ == "__main__":
     results = make_table(update=True)
