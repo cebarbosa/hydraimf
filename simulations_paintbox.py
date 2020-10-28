@@ -4,7 +4,6 @@ Simulating stellar population analysis with Paintbox
 """
 import os
 import copy
-import getpass
 
 import numpy as np
 from scipy import stats
@@ -14,6 +13,8 @@ import ppxf.ppxf_util as util
 import emcee
 import zeus
 import paintbox as pb
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 import context
 
@@ -54,6 +55,7 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
         limits[param] = (vmin, vmax)
     logwave = Table.read(templates_file, hdu=2)["loglam"].data
     twave = np.exp(logwave)
+
     ssp = pb.ParametricModel(twave, params, templates)
     if nssps > 1:
         for i in range(nssps):
@@ -81,12 +83,12 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     limits["p0"] = (0.5, 1.5)
     return sed, limits
 
-def create_simulations(sed, limits, sn=50, nsim=1000, redo=False):
+def create_simulations(sed, limits, sn=50, nsim=1000, redo=False, nlines=30):
     simfile = os.path.join(os.getcwd(), "simulations.fits")
     if os.path.exists(simfile) and not redo:
         return
     psim = np.zeros((nsim, len(sed.parnames)))
-    for i, p in enumerate(sed.parnames):
+    for i, p in enumerate(tqdm(sed.parnames, desc="Building simulations")):
         psim[:,i] = np.random.uniform(limits[p][0], limits[p][1], nsim)
     params = Table(psim, names=sed.parnames)
     simspec = np.zeros((nsim, len(sed.wave)))
@@ -96,7 +98,13 @@ def create_simulations(sed, limits, sn=50, nsim=1000, redo=False):
         signal = np.median(spec)
         noise = signal / sn
         simspec[n] = spec + np.random.normal(0, noise, len(sed.wave))
+        # plt.plot(sed.wave, simspec[n])
         noises[n] = noise
+        # Including lines
+        idx = np.random.choice(np.arange(len(sed.wave)), nlines)
+        simspec[n][idx] += np.random.exponential(0.3, nlines)
+        # plt.plot(sed.wave, simspec[n])
+        # plt.show()
     hdu0 = fits.PrimaryHDU(simspec)
     hdu0.header["EXTNAME"] = "DATA"
     hdu1 = fits.BinTableHDU(params)
@@ -139,7 +147,8 @@ def run_sampler(sed, limits, loglike, db, redo=False, nsteps=1000,
     table.write(db, overwrite=True)
     return
 
-def fit_simulations(sed, limits, start=0, limitto=100, sampler="zeus"):
+def fit_simulations(sed, limits, start=0, limitto=100, sampler="zeus",
+                    loglike="normal"):
     specs = fits.getdata("simulations.fits")
     noise = fits.getdata("simulations.fits", extname="NOISE")
     zeus_dir = os.path.join(os.getcwd(), "zeus")
@@ -155,7 +164,12 @@ def fit_simulations(sed, limits, start=0, limitto=100, sampler="zeus"):
         norm = np.median(flam)
         flam /= norm
         flamerr = np.full_like(flam, noise[i] / norm)
-        loglike = pb.NormalLogLike(flam, sed, obserr=flamerr)
+        if loglike == "normal":
+            loglike = pb.NormalLogLike(flam, sed, obserr=flamerr)
+        elif loglike == "studt":
+            loglike = pb.StudTLogLike(flam, sed, obserr=flamerr)
+            limits["nu"] = (2.01, 10)
+            sed.parnames.append("nu")
         db = os.path.join(os.getcwd(), sampler, "{}_chain.fits".format(name))
         run_sampler(sed, limits, loglike, db, sampler=sampler)
 
@@ -163,8 +177,11 @@ def fit_simulations(sed, limits, start=0, limitto=100, sampler="zeus"):
 if __name__ == "__main__":
     data_dir = os.path.join(context.data_dir, "pbsim")
     sspmodel = "emiles"
+    loglike = "studt"
+    nssps_sim = 1
+    nssps_fit = 1
     sample, nsim, sn = "all", 1000, 50
-    simname = "{}_{}_nsim{}_sn{}".format(sspmodel, sample, nsim, sn)
+    simname = "{}_{}_{}_sn{}".format(sspmodel, sample, loglike, sn)
     wdir = os.path.join(data_dir, simname)
     for _dir in [data_dir, wdir]:
         if not os.path.exists(_dir):
@@ -173,4 +190,4 @@ if __name__ == "__main__":
     wave = make_wave_array()
     sed, limits = build_sed_model(wave, sample=sample)
     create_simulations(sed, limits, nsim=nsim)
-    fit_simulations(sed, limits, start=0, sampler="emcee")
+    fit_simulations(sed, limits, start=900, sampler="emcee", loglike=loglike)
