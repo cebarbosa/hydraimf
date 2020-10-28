@@ -25,10 +25,7 @@ from astropy.io import fits
 from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
 from matplotlib import cm
-try:
-    import ppxf_util as util
-except:
-    import ppxf.ppxf_util as util
+import ppxf.ppxf_util as util
 from spectres import spectres
 import pymc3 as pm
 import theano.tensor as tt
@@ -39,9 +36,11 @@ from scipy import stats
 
 import context
 import paintbox as pb
+from paintbox.interfaces import TheanoLogLikeInterface
 
 def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
-                    fwhm=2.95, em_oversample=8, porder=30, nssps=1):
+                    fwhm=2.95, em_oversample=8, porder=30, nssps=1,
+                    use_emission=True):
     """ Build model for NGC 3311"""
     # Preparing templates
     sample = "all" if sample is None else sample
@@ -76,30 +75,32 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     # Adding extinction to the stellar populations
     extinction = pb.CCM89(twave)
     stars = pb.Resample(wave, pb.LOSVDConv(pop * extinction, velscale=velscale))
+    if use_emission:
     # Loading templates for the emission lines
-    velscale_gas = velscale / em_oversample
-    logemwave = util.log_rebin([w1, w2], twave, velscale=velscale_gas)[1]
-    emwave = np.exp(logemwave)
-    emission_lines, line_names, line_wave = util.emission_lines(logemwave,
-            [emwave[0], emwave[-1]], fwhm)
-    ############################################################################
-    # Adding [NI]
-    line_wave = [5200.257]
-    gauss = util.gaussian(logemwave, line_wave, fwhm, True)
-    emission_lines = np.column_stack([emission_lines, gauss])
-    line_names = np.append(line_names, 'NI5200')
-    line_wave = np.append(line_wave, line_wave[0])
-    ############################################################################
-    line_names = [_.replace("[", "").replace("]", "").replace("_", "") for _ in
-                  line_names]
-    emission_lines = emission_lines.T
-    emnorm = emission_lines.max(axis=1)
-    emission_lines /= emnorm[:, None]
-    emission = pb.Resample(wave,
-                           pb.LOSVDConv(pb.NonParametricModel(emwave, emission_lines,
-                                                            line_names), velscale=velscale_gas))
-    emission.parnames[-1] = "sigma_gas"
-    emission.parnames[-2] = "V_gas"
+        velscale_gas = velscale / em_oversample
+        logemwave = util.log_rebin([w1, w2], twave, velscale=velscale_gas)[1]
+        emwave = np.exp(logemwave)
+        emission_lines, line_names, line_wave = util.emission_lines(logemwave,
+                [emwave[0], emwave[-1]], fwhm)
+        ############################################################################
+        # Adding [NI]
+        line_wave = [5200.257]
+        gauss = util.gaussian(logemwave, line_wave, fwhm, True)
+        emission_lines = np.column_stack([emission_lines, gauss])
+        line_names = np.append(line_names, 'NI5200')
+        line_wave = np.append(line_wave, line_wave[0])
+        ############################################################################
+        line_names = [_.replace("[", "").replace("]", "").replace("_", "") for _ in
+                      line_names]
+        emission_lines = emission_lines.T
+        emnorm = emission_lines.max(axis=1)
+        emission_lines /= emnorm[:, None]
+        emission = pb.Resample(wave, pb.LOSVDConv(pb.NonParametricModel(emwave,
+                      emission_lines, line_names), velscale=velscale_gas))
+        emission.parnames[-1] = "sigma_gas"
+        emission.parnames[-2] = "V_gas"
+    else:
+        line_names = []
     # Adding a polynomial
     poly = pb.Polynomial(wave, porder)
     # Using skycalc model to model residuals
@@ -109,9 +110,14 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     fsky = fits.getdata(sky_templates_file, hdu=1)
     snames = Table.read(sky_templates_file, hdu=2)["skylines"].data
     snames = ["sky" + re.sub(r"[\(\)$\-\_]", "", _.decode()) for _ in snames]
+    if not use_emission:
+        fsky = fsky[:-2]
+        snames = snames[:-2]
     sky = pb.Resample(wave, pb.NonParametricModel(wsky, fsky, snames))
     # Creating a model including LOSVD
-    sed = (stars * poly) + sky + emission
+    sed = (stars * poly) + sky
+    if use_emission:
+        sed += emission
     # Setting properties that may be useful later in modeling
     sed.ssppars = limits
     sed.sspcolnames = params.colnames
@@ -121,128 +127,121 @@ def build_sed_model(wave, w1=4500, w2=9400, velscale=200, sample=None,
     sed.nssps = nssps
     return sed, norm, sky
 
-def make_p0(sed):
-    """ Produces an initial guess for the model. """
-    polynames = ["p{}".format(i + 1) for i in range(sed.porder)]
-    p0 = []
+def make_priors(sed):
+    priors = {}
+    polynames = ["p{}".format(i) for i in range(1,100)]
+    stop=False
+    nssps = np.maximum(1,
+                       np.sum([1 for p in sed.parnames if p.startswith("w_")]))
     for param in sed.parnames:
         if len(param.split("_")) == 2:
-            pname, n = param.split("_")
+            pname, npop = param.split("_")
         else:
             pname = param
-        # Weight of the ssp
-        if pname == "w":
-            p0.append(1.)
-        # Stellar population parameters
-        elif pname in sed.ssppars:
+        if pname in sed.ssppars:
             vmin, vmax = sed.ssppars[pname]
-            p0.append(0.5 * (vmin + vmax))
-        # Dust attenuation parameters
+            priors[param] = stats.uniform(loc=vmin, scale=vmax - vmin)
+        elif pname == "w":
+            priors[param] = stats.halfnorm(
+                            scale=1 / nssps * np.sqrt(0.5 * np.pi))
         elif param == "Av":
-            p0.append(0.1)
+            priors[param] = stats.expon(scale=0.2)
         elif param == "Rv":
-            p0.append(3.1)
-        elif param == "V":
-            p0.append(3800)
+            mu, sd = 3.1, 0.8
+            a, b = (0 - mu) / sd, (np.infty - mu) / sd
+            priors[param] = stats.truncnorm(a, b, mu, sd)
+        elif param in ["V", "V_gas"]:
+            priors[param] = stats.norm(loc=3800, scale=50)
         elif param == "sigma":
-            p0.append(200)
-        # Emission lines
-        elif param in sed.line_names:
-            p0.append(1)
-        elif param == "V_gas":
-            p0.append(3850)
+            priors[param] = stats.uniform(loc=100, scale=400)
         elif param == "sigma_gas":
-            p0.append(75.)
-        # Polynomia parameters
-        elif pname == "p0":
-            p0.append(1.)
+            priors[param] = stats.uniform(loc=60, scale=60)
+        elif param == "p0":
+            mu, sd = 1, 0.3
+            a, b = (0 - mu) / sd, (np.infty - mu) / sd
+            priors[param] = stats.truncnorm(a, b, mu, sd)
         elif param in polynames:
-            p0.append(0.01)
-        elif param == "sky":
-            p0.append(-10)
-    return np.array(p0)
+            priors[param] = stats.norm(0, 0.02)
+        elif param.startswith("sky"):
+            priors[param] = stats.norm(0, 0.1)
+        elif param in sed.line_names:
+            priors[param] = stats.halfnorm(scale=1)
+        else:
+            print("missing prior: {}".format(param))
+            stop = True
+    if stop:
+        input()
+    priors["eta"] = stats.uniform(loc=1, scale=10)
+    priors["nu"] = stats.uniform(loc=2.01, scale=8)
+    return priors
 
 # Deterministic function for stick breaking
 def stick_breaking(beta):
     portion_remaining = tt.concatenate([[1], tt.extra_ops.cumprod(1 - beta)[:-1]])
     return beta * portion_remaining
 
-def make_pymc3_model(flux, sed, loglike=None, fluxerr=None):
-    loglike = "normal2" if loglike is None else loglike
-    flux = flux.astype(np.float)
-    fluxerr = np.ones_like(flux) if fluxerr is None else fluxerr
+def make_pymc3_model(sed, loglike):
     model = pm.Model()
-    polynames = ["p{}".format(i + 1) for i in range(sed.porder)]
+    polynames = ["p{}".format(i + 1) for i in range(100)]
     with model:
         # alpha = pm.Gamma('alpha', 1., 1.)
         # beta = pm.Beta('beta', 1, alpha, shape=sed.nssps)
         # w = pm.Deterministic('w', stick_breaking(beta))
         theta = []
-        for param in sed.parnames:
+        for param in loglike.parnames:
+            v = False
             if len(param.split("_")) == 2:
                 pname, n = param.split("_")
             else:
                 pname = param
                 n = 1
             # Weight of the ssp
-            if pname == "w":
-                theta.append(w[int(n)-1])
+            # if pname == "w":
+            #     theta.append(w[int(n)-1])
             # Stellar population parameters
             if pname in sed.ssppars:
                 vmin, vmax = sed.ssppars[pname]
                 vinit = float(0.5 * (vmin + vmax))
                 v = pm.Uniform(param, lower=float(vmin), upper=float(vmax),
                                testval=vinit)
-                theta.append(v)
             # Dust attenuation parameters
             elif param == "Av":
-                Av = pm.Exponential("Av", lam=1 / 0.4, testval=0.1)
-                theta.append(Av)
+                v = pm.Exponential("Av", lam=1 / 0.4, testval=0.1)
             elif param == "Rv":
                 BNormal = pm.Bound(pm.Normal, lower=0)
-                Rv = BNormal("Rv", mu=3.1, sd=1., testval=3.1)
-                theta.append(Rv)
+                v = BNormal("Rv", mu=3.1, sd=1., testval=3.1)
             elif param == "V":
                 # Stellar kinematics
-                V = pm.Normal("V", mu=3800., sd=50., testval=3805.)
-                theta.append(V)
+                v = pm.Normal("V", mu=3800., sd=50., testval=3805.)
             elif param == "sigma":
-                sigma = pm.Uniform(param, lower=100, upper=500, testval=185.)
-                theta.append(sigma)
+                v = pm.Uniform(param, lower=100, upper=500, testval=185.)
             # Emission lines
             elif param in sed.line_names:
                 v = pm.HalfNormal(param, 1., testval=1.)
-                theta.append(v)
             elif param == "V_gas":
-                V_gas = pm.Uniform("V_gas", lower=3600., upper=4100.,
+                v = pm.Uniform("V_gas", lower=3600., upper=4100.,
                                    testval=3805.)
-                theta.append(V_gas)
             elif param == "sigma_gas":
-                sigma_gas = pm.Uniform("sigma_gas", lower=60., upper=120,
+                v = pm.Uniform("sigma_gas", lower=60., upper=120,
                                        testval=85.)
-                theta.append(sigma_gas)
             # Polynomial parameters
             elif pname == "p0":
-                p0 = pm.Normal("p0", mu=1, sd=0.1, testval=1.)
-                theta.append(p0)
+                v = pm.Normal("p0", mu=1, sd=0.1, testval=1.)
             elif param in polynames:
-                pn = pm.Normal(param, mu=0, sd=0.01, testval=0.)
-                theta.append(pn)
+                v = pm.Normal(param, mu=0, sd=0.01, testval=0.)
             elif param.startswith("sky"):
-                sky = pm.Normal(param, mu=0, sd=1, testval=-0.1)
-                theta.append(sky)
-        if loglike == "studt":
-            nu = pm.Uniform("nu", lower=2.01, upper=50, testval=10.)
-            theta.append(nu)
-        if loglike == "normal2":
-            x = pm.Normal("x", mu=0, sd=1, testval=0.)
-            s = pm.Deterministic("S", 1. + pm.math.exp(x))
-            theta.append(s)
-            loglike = pb.Normal2LogLike(flux, sed, obserr=fluxerr)
+                v = pm.Normal(param, mu=0, sd=1, testval=-0.1)
+            elif param == "eta":
+                v = pm.Uniform("eta", lower=1, upper=10)
+            elif param == "nu":
+                v = pm.Uniform("nu", lower=2.01, upper=50, testval=10.)
+            theta.append(v)
+            if v is False:
+                print("Missing parameter prior for pymc3: {}".format(param))
+                input()
         theta = tt.as_tensor_variable(theta).T
-        logl = pb.TheanoLogLikeInterface(loglike)
-        pm.DensityDist('loglike', lambda v: logl(v),
-                       observed={'v': theta})
+        logl = TheanoLogLikeInterface(loglike)
+        pm.DensityDist('loglike', lambda v: logl(v), observed={'v': theta})
     return model
 
 def run_mcmc(model, db, redo=False, method=None):
@@ -252,59 +251,70 @@ def run_mcmc(model, db, redo=False, method=None):
         return
     with model:
         if method == "MCMC":
-            trace = pm.sample(draws=300, tune=300, step=pm.Metropolis())
+            trace = pm.sample(draws=300, tune=300, step=pm.Metropolis(),
+                              cores=1)
         elif method == "NUTS":
             trace = pm.sample()
         elif method == "SMC":
             trace = pm.sample_smc(draws=250, threshold=0.3,
                                       progressbar=True )
         pm.save_trace(trace, db, overwrite=True)
-        # df = pm.summary(trace)
-        # df.to_csv(summary)
     return trace
 
-def run_emcee(flam, flamerr, sed, db, loglike="normal2"):
-    pnames = copy.deepcopy(sed.parnames)
-    if loglike == "normal2":
-        pnames.append("S")
-    if loglike == "studt":
-        pnames.append("nu")
-    mcmc_db = db.replace("EMCEE", "MCMC").replace(".h5", "")
-    trace = load_traces(mcmc_db, pnames)
-    ndim = len(pnames)
+# def run_emcee(loglike, sed, db, priors):
+#     mcmc_db = db.replace("EMCEE", "MCMC").replace(".h5", "")
+#     trace = load_traces(mcmc_db, loglike.parnames)
+#     ndim = len(loglike.parnames)
+#     nwalkers = 2 * ndim
+#     pos = np.zeros((nwalkers, ndim))
+#     priors = []
+#     for i, param in enumerate(loglike.parnames):
+#         if len(param.split("_")) == 2:
+#             pname, n = param.split("_")
+#         else:
+#             pname = param
+#         ########################################################################
+#         # Setting first guess and limits of models
+#         ########################################################################
+#         # Stellar population parameters
+#         if pname in sed.ssppars:
+#             vmin, vmax = sed.ssppars[pname]
+#         else:
+#             vmin = np.percentile(trace[:,i], 1)
+#             vmax = np.percentile(trace[:,i], 99)
+#         prior = stats.uniform(vmin, vmax - vmin)
+#         priors.append(prior.logpdf)
+#         pos[:, i] = prior.rvs(nwalkers)
+#     def log_probability(theta):
+#         lp = np.sum([prior(val) for prior, val in zip(priors, theta)])
+#         if not np.isfinite(lp) or np.isnan(lp):
+#             return -np.inf
+#         return loglike(theta)
+#     backend = emcee.backends.HDFBackend(db)
+#     backend.reset(nwalkers, ndim)
+#     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability,
+#                                     backend=backend)
+#     sampler.run_mcmc(pos, 1000, progress=True)
+#     return
+
+def run_sampler(loglike, priors, outdb, nsteps=3000):
+    ndim = len(loglike.parnames)
     nwalkers = 2 * ndim
-    polynames = ["p{}".format(i+1) for i in range(sed.porder)]
     pos = np.zeros((nwalkers, ndim))
-    priors = []
-    for i, param in enumerate(pnames):
-        if len(param.split("_")) == 2:
-            pname, n = param.split("_")
-        else:
-            pname = param
-        ########################################################################
-        # Setting first guess and limits of models
-        ########################################################################
-        # Stellar population parameters
-        if pname in sed.ssppars:
-            vmin, vmax = sed.ssppars[pname]
-        else:
-            vmin = np.percentile(trace[:,i], 1)
-            vmax = np.percentile(trace[:,i], 99)
-        prior = stats.uniform(vmin, vmax - vmin)
-        priors.append(prior.logpdf)
-        pos[:, i] = prior.rvs(nwalkers)
-    if loglike == "normal2":
-        log_likelihood = pb.Normal2LogLike(flam, sed, obserr=flamerr)
+    logpdf = []
+    for i, param in enumerate(loglike.parnames):
+        logpdf.append(priors[param].logpdf)
+        pos[:, i] = priors[param].rvs(nwalkers)
     def log_probability(theta):
-        lp = np.sum([prior(val) for prior, val in zip(priors, theta)])
+        lp = np.sum([prior(val) for prior, val in zip(logpdf, theta)])
         if not np.isfinite(lp) or np.isnan(lp):
             return -np.inf
-        return log_likelihood(theta)
-    backend = emcee.backends.HDFBackend(db)
+        return lp + loglike(theta)
+    backend = emcee.backends.HDFBackend(outdb)
     backend.reset(nwalkers, ndim)
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability,
                                     backend=backend)
-    sampler.run_mcmc(pos, 1000, progress=True)
+    sampler.run_mcmc(pos, nsteps, progress=True)
     return
 
 def weighted_traces(trace, sed, weights, outtab, redo=False):
@@ -351,7 +361,7 @@ def make_table(trace, outtab):
     return tab
 
 def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None,
-                 norm=1, unit_norm=19, lw=1):
+                 norm=1, unit_norm=19, lw=1, skylines=[]):
     outfig = "{}_fitting".format(db.replace(".h5", ""))
     specnum = os.path.split(db)[1].replace(".h5", "").split("_")[-1]
     if os.path.exists("{}.png".format(outfig)) and not redo:
@@ -409,6 +419,8 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None,
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [2, 1]},
                             figsize=(2 * context.fig_width, 3))
     ax = plt.subplot(axs[0])
+    for skyline in skylines:
+        ax.axvspan(skyline - 3, skyline + 3, color="0.9", zorder=-100)
     ax.fill_between(wave, flux + fluxerr, flux - fluxerr, color="0.8")
     ax.fill_between(wave, flux0 + fluxerr, flux0 - fluxerr,
                     "-", label="Spectrum {}".format(specnum), color="C0")
@@ -429,18 +441,24 @@ def plot_fitting(wave, flux, fluxerr, sed, traces, db, redo=True, sky=None,
     ax.set_ylim(None, 1.1 * ylim[1])
     # Residual plot
     ax = plt.subplot(axs[1])
-    rmse = np.std((flux - bestfit) / flux)
+    for skyline in skylines:
+        ax.axvspan(skyline - 3, skyline + 3, color="0.9", zorder=-100)
+    p = flux - bestfit
+    sigma_mad = 1.4826 * np.median(np.abs(p - np.median(p)))
+    rmse = 100 * sigma_mad / np.median(flux)
     ax.fill_between(wave, skymed - fluxerr, skymed + fluxerr, color="0.8")
     ax.fill_between(wave, fluxerr, - fluxerr, "-", color="C0")
     for i in [0, 2, 1]:
         c = colors[i]
         per = percs[i]
-        label = "RMSE={:.1f}\%".format(100 * rmse) if i==1 else None
+        label = "RMSE={:.2f}\%".format(rmse) if i==1 \
+                 else None
         ax.fill_between(wave, np.percentile(models, per, axis=0) - skymed -
                         flux0,
                          np.percentile(models, percs[i+1], axis=0) - skymed -
                         flux0,
                         color=c, lw=lw, label=label)
+    # ax.set_ylim(-5 * sigma_mad, 5 * sigma_mad)
     ax.axhline(y=0, ls="--", c="k", lw=1, zorder=1000)
     ax.set_xlabel(r"$\lambda$ (\r{A})")
     ax.set_ylabel("$\Delta f_\lambda$")
@@ -557,24 +575,25 @@ def compare_traces(flux, fluxerr, sed, t1, t2):
     return
 
 def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
-                redo=False, nssps=1, porder=30, dataset="MUSE"):
+                redo=False, nssps=1, porder=30, dataset="MUSE",
+                postprocessing=True):
     """ Run pb full spectrum fitting. """
     # os.environ["OMP_NUM_THREADS"] = "8"
     ltype = "normal2" if ltype is None else ltype
     sample = "all" if sample is None else sample
     nssps_str = "" if nssps == 1 else "_{}ssps".format(nssps)
-    postprocessing = True if getpass.getuser() == "kadu" else False
     # Setting up directories
     wdir = os.path.join(context.data_dir, dataset,
                         "voronoi/sn{}/sci".format(targetSN))
-    emcee_dir = os.path.join(os.path.split(wdir)[0], "EMCEE{}".format(
-        nssps_str))
-    mcmc_dir = os.path.join(os.path.split(wdir)[0], "MCMC{}".format(nssps_str))
+    emcee_dir = os.path.join(os.path.split(wdir)[0], "EMCEE{}_{}".format(
+                             nssps_str, ltype))
+    mcmc_dir = os.path.join(os.path.split(wdir)[0], "MCMC{}_{}".format(
+                            nssps_str, ltype))
     for dir_ in [emcee_dir, mcmc_dir]:
         if not os.path.exists(dir_):
             os.mkdir(dir_)
     specnames = sorted([_ for _ in sorted(os.listdir(wdir)) if _.endswith(
-            ".fits")])
+                        ".fits")])
     # Check int arguments in sys.argv to set bins
     idxs = []
     for argv in sys.argv:
@@ -602,11 +621,13 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
     for line in skylines:
         sky = np.argwhere((wave <= line - 5) | (wave >= line + 5)).ravel()
         goodpixels = np.intersect1d(goodpixels, sky)
-    wave = wave[goodpixels]
+    # wave = wave[goodpixels]
     print("Producing SED model...")
+    use_emission = False if ltype.startswith("studt2") else True
     sed, mw, sky = build_sed_model(wave, sample=sample, nssps=nssps,
-                                 porder=porder)
-    for specname in specnames[::-1]:
+                                   porder=porder, use_emission=use_emission)
+    priors = make_priors(sed)
+    for specname in specnames:
         print("Processing spectrum {}".format(specname))
         name = specname.split(".")[0]
         binnum = name.split("_")[2]
@@ -618,15 +639,21 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         norm = np.median(flam)
         flam /= norm
         flamerr /= norm
+        # Setting the loglikelyhood
+        if ltype == "normal2":
+            loglike = pb.Normal2LogLike(flam, sed, obserr=flamerr)
+        elif ltype == "studt":
+            loglike = pb.StudTLogLike(flam, sed, obserr=flamerr)
+        elif ltype == "studt2":
+            loglike = pb.StudT2LogLike(flam, sed, obserr=flamerr)
         # Start with an MCMC using Metropolis step
-        mcmc_db = os.path.join(mcmc_dir, "{}".format(name))
-        if not os.path.exists(mcmc_db) and postprocessing:
-            continue
-        if not os.path.exists(mcmc_db):
-            print("Compiling pymc3 model for MH model...")
-            model = make_pymc3_model(flam, sed, fluxerr=flamerr,
-                                     loglike=ltype)
-            run_mcmc(model, mcmc_db, redo=False, method="MCMC")
+        # mcmc_db = os.path.join(mcmc_dir, "{}".format(name))
+        # if not os.path.exists(mcmc_db) and postprocessing:
+        #     continue
+        # if not os.path.exists(mcmc_db):
+        #     print("Compiling pymc3 model for MH model...")
+        #     model = make_pymc3_model(sed, loglike)
+        #     run_mcmc(model, mcmc_db, redo=False, method="MCMC")
         # Run second method using initial results from MH run
         emcee_db = os.path.join(emcee_dir, "{}.h5".format(name))
         if not os.path.exists(emcee_db) and postprocessing:
@@ -634,24 +661,30 @@ def run_ngc3311(targetSN=250, velscale=200, ltype=None, sample=None,
         if not os.path.exists(emcee_db) or redo:
             os.environ["OMP_NUM_THREADS"] = "8"
             print("Running EMCEE...")
-            run_emcee(flam, flamerr, sed, emcee_db)
+            run_sampler(loglike, priors, emcee_db)
+            # run_emcee(flam, flamerr, sed, emcee_db, priors, loglike=ltype)
             os.environ["OMP_NUM_THREADS"] = "2"
         reader = emcee.backends.HDFBackend(emcee_db)
-        samples = reader.get_chain(discard=800, flat=True, thin=100)
-        emcee_traces = samples[:, :len(sed.parnames)]
+        trace = reader.get_chain(discard=800, flat=True, thin=100)
+        print("Using trace with {} samples".format(len(trace)))
+        emcee_traces = trace[:, :len(sed.parnames)]
         idx = [sed.parnames.index(p) for p in sed.sspcolnames]
         ptrace_emcee = Table(emcee_traces[:, idx], names=sed.sspcolnames)
-        summary_trace = Table(emcee_traces, names=sed.parnames)
         if postprocessing:
             print("Producing corner plots...")
             title = "Spectrum {}".format(binnum)
-            plot_corner(ptrace_emcee, emcee_db, title=title, redo=True)
+            plot_corner(ptrace_emcee, emcee_db, title=title, redo=False)
             print("Producing fitting figure...")
             plot_fitting(wave, flam, flamerr, sed, emcee_traces, emcee_db,
-                         redo=True  , sky=sky, norm=norm)
+                         redo=True , sky=sky, norm=norm, skylines=skylines)
             print("Making summary table...")
             outtab = os.path.join(emcee_db.replace(".h5", "_results.fits"))
+            summary_trace = Table(trace, names=loglike.parnames)
             make_table(summary_trace, outtab)
 
 if __name__ == "__main__":
-    run_ngc3311()
+    postprocessing = True if getpass.getuser() == "kadu" else False
+    ltype = "normal2"
+    porder= 45 if ltype == "studt2" else 30
+    run_ngc3311(ltype=ltype, postprocessing=postprocessing, porder=porder,
+                nssps=1, sample="all")
