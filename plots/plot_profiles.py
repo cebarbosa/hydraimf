@@ -363,13 +363,13 @@ def plot_imf_relations(t, figsize=(7.24, 4.5)):
             plt.savefig("{}_{}.{}".format(output, k+1, fmt), dpi=300)
         plt.close()
 
-def plot_imf_individual(t, figsize=(3.54, 4.5)):
+def plot_imf_individual(t, figsize=(3.54, 2.5)):
     global labels, wdir
     corr = Table.read(os.path.join(wdir, "fit_stats.fits"))
     mapper, colors = get_colors(t["R"])
-    xlim = {"T": [None, None], "Z": [-0.2, 0.25], "alphaFe": [0, 0.45],
+    xlim = {"T": [None, None], "Z": [-0.2, 0.26], "alphaFe": [-.05, 0.48],
             "NaFe": [None, 0.7], "sigma": [80, 380], "Re": [-0.1, 1.1],
-            "logSigma": [None, 11]}
+            "logSigma": [7.8, 11.2]}
     xelf1 = {"T": 0.8, "Z": 0.85, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.85,
             "Re": 0.3, "logSigma": 0.8}
     xelf2 = {"T": 0.8, "Z": 0.85, "alphaFe": 0.85, "NaFe": 0.75, "sigma": 0.85,
@@ -377,11 +377,15 @@ def plot_imf_individual(t, figsize=(3.54, 4.5)):
     xelfs = {"alpha" : xelf2, "imf": xelf1}
     ylims = {"imf": (0.5, 3.6), "alpha": (0.5, 2.2)}
     xfields= ["sigma", "Z", "alphaFe", "NaFe", "T", "Re", "logSigma"]
-    yfields = ["imf", "alpha"]
+    yfields = ["imf"]
+    xbar = {"T": 0.15, "Z": 0.15, "alphaFe": 0.15, "NaFe": 0.75, "sigma": 0.15,
+            "Re": 0.15, "logSigma": 0.15}
+    ybar = {"T": 0.75, "Z": 0.75, "alphaFe": 0.2, "NaFe": 0.75, "sigma": 0.75,
+            "Re": 0.2, "logSigma": 0.75}
     for k, xfield in enumerate(xfields):
         fig = plt.figure(figsize=figsize)
-        gs = gridspec.GridSpec(2, 1, figure=fig)
-        gs.update(left=0.11, right=0.985, bottom=0.07, top=0.99, wspace=0.03,
+        gs = gridspec.GridSpec(len(yfields), 1, figure=fig)
+        gs.update(left=0.10, right=0.99, bottom=0.125, top=0.99, wspace=0.03,
                   hspace=0.05)
         for i, yfield in enumerate(yfields):
             xs = t[xfield]
@@ -398,9 +402,9 @@ def plot_imf_individual(t, figsize=(3.54, 4.5)):
                             ecolor="0.8", mec="w", color=c,
                             mew=0.5, elinewidth=0.5)
             ax.set_ylabel(labels[yfield])
-            if i == 0:
+            if i + 1 < len(yfields):
                 ax.xaxis.set_ticklabels([])
-            else:
+            if i+ 1 == len(yfields):
                 ax.set_xlabel(labels[xfield])
             ax.set_xlim(xlim[xfield])
             ax.set_ylim(ylims[yfield])
@@ -436,7 +440,7 @@ def plot_imf_individual(t, figsize=(3.54, 4.5)):
             ####################################################################
             add_literature_results(ax, xfield, yfield)
             plt.legend(loc=2, frameon=False, prop={"size": 6}, ncol=2)
-        cbar_pos=[0.16, 0.12, 0.25, 0.025]
+        cbar_pos=[xbar[xfield], ybar[xfield], 0.25, 0.05]
         cbaxes = fig.add_axes(cbar_pos)
         cbar = plt.colorbar(mapper, cax=cbaxes, orientation="horizontal")
         cbar.set_ticks(np.linspace(0, 16, 5))
@@ -472,12 +476,12 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
             ax.plot(x[j][0], y[j][0], "s-", c=colors[j], label=lparikh,
                     mec=colors[j])
     ####################################################################
-    # Sarzi et al. 2017
+    # Sarzi et al. 2018
     stable = os.path.join(context.home,
                           "tables/sarzi2017_{}_imf.csv".format(xfield))
     if os.path.exists(stable) and yfield == "imf":
         x, y = np.loadtxt(stable, delimiter=",", unpack=True)
-        lsarzi = "Sarzi et al. (2017)"  # if i==5 else None
+        lsarzi = "Sarzi et al. (2018)"  # if i==5 else None
         ax.plot(x, y, "-", c="r", label=None)
         ax.plot(x[0], y[0], "^-", c="r", label=lsarzi)
         ax.plot(x[0], y[0], "^-", c="r", label=None, mec="r")
