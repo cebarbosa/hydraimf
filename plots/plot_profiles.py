@@ -287,7 +287,7 @@ def plot_imf_relations(t, figsize=(7.24, 4.5)):
     for k, xfields in enumerate(xfig):
         fig = plt.figure(figsize=figsize)
         gs = gridspec.GridSpec(2, 3, figure=fig)
-        gs.update(left=0.058, right=0.91, bottom=0.07, top=0.99, wspace=0.03,
+        gs.update(left=0.07, right=0.91, bottom=0.07, top=0.99, wspace=0.03,
                   hspace=0.05)
         for i, (yfield, xfield) in enumerate(itertools.product(yfields,
                                                                xfields)):
@@ -378,10 +378,12 @@ def plot_imf_individual(t, figsize=(3.54, 2.5)):
     ylims = {"imf": (0.5, 3.6), "alpha": (0.5, 2.2)}
     xfields= ["sigma", "Z", "alphaFe", "NaFe", "T", "Re", "logSigma"]
     yfields = ["imf"]
-    xbar = {"T": 0.15, "Z": 0.15, "alphaFe": 0.15, "NaFe": 0.75, "sigma": 0.15,
+    xbar = {"T": 0.15, "Z": 0.15, "alphaFe": 0.15, "NaFe": 0.75, "sigma": 0.4,
             "Re": 0.15, "logSigma": 0.15}
-    ybar = {"T": 0.75, "Z": 0.75, "alphaFe": 0.2, "NaFe": 0.75, "sigma": 0.75,
+    ybar = {"T": 0.72, "Z": 0.65, "alphaFe": 0.2, "NaFe": 0.75, "sigma": 0.2,
             "Re": 0.2, "logSigma": 0.75}
+    loc = {"T": 2, "Z": 2, "alphaFe": 2, "NaFe": 2, "sigma": 2,
+            "Re": 1, "logSigma": 2}
     for k, xfield in enumerate(xfields):
         fig = plt.figure(figsize=figsize)
         gs = gridspec.GridSpec(len(yfields), 1, figure=fig)
@@ -439,7 +441,8 @@ def plot_imf_individual(t, figsize=(3.54, 2.5)):
                             size=5.5, c="k")
             ####################################################################
             add_literature_results(ax, xfield, yfield)
-            plt.legend(loc=2, frameon=False, prop={"size": 6}, ncol=2)
+            plt.legend(loc=loc[xfield], frameon=False, prop={"size": 4.8},
+                       ncol=1)
         cbar_pos=[xbar[xfield], ybar[xfield], 0.25, 0.05]
         cbaxes = fig.add_axes(cbar_pos)
         cbar = plt.colorbar(mapper, cax=cbaxes, orientation="horizontal")
@@ -460,6 +463,16 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
     global labels
     xmin, xmax = ax.get_xlim()
     ####################################################################
+    # Sarzi et al. 2018
+    stable = os.path.join(context.home,
+                          "tables/sarzi2017_{}_imf.csv".format(xfield))
+    if os.path.exists(stable) and yfield == "imf":
+        x, y = np.loadtxt(stable, delimiter=",", unpack=True)
+        lsarzi = "M87 (Sarzi et al. 2018)"  # if i==5 else None
+        ax.plot(x, y, "-", c="r", label=None)
+        ax.plot(x[0], y[0], "^-", c="r", label=lsarzi)
+        ax.plot(x[0], y[0], "^-", c="r", label=None, mec="r")
+    ####################################################################
     # Plot results from Parikh et al. (2018)
     xtable = os.path.join(context.home,
                           "tables/parikh2018_{}.txt".format(xfield))
@@ -469,22 +482,13 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
         y = np.loadtxt(ytable).ravel()[::2].reshape(3, 10)
         x = np.loadtxt(xtable).ravel()[::2].reshape(3, 10)
         colors = ["lightgreen", "limegreen", "green"]
+        masses = [[9.9,10.2], [10.2,10.5], [10.5,10.8]]
         for j in range(3):
-            lparikh = "Parikh et al. (2018)" if (j == 2) else \
-                None
+            lparikh = "$\log M/M_\odot = {0[0]}-{0[1]}$ (Parikh et al. " \
+                      "2018)".format(masses[j])
             ax.plot(x[j], y[j], "-", c=colors[j], label=None, mec="w")
             ax.plot(x[j][0], y[j][0], "s-", c=colors[j], label=lparikh,
                     mec=colors[j])
-    ####################################################################
-    # Sarzi et al. 2018
-    stable = os.path.join(context.home,
-                          "tables/sarzi2017_{}_imf.csv".format(xfield))
-    if os.path.exists(stable) and yfield == "imf":
-        x, y = np.loadtxt(stable, delimiter=",", unpack=True)
-        lsarzi = "Sarzi et al. (2018)"  # if i==5 else None
-        ax.plot(x, y, "-", c="r", label=None)
-        ax.plot(x[0], y[0], "^-", c="r", label=lsarzi)
-        ax.plot(x[0], y[0], "^-", c="r", label=None, mec="r")
     ####################################################################
     if xfield == "Z" and yfield == "imf":
         z = np.linspace(-0.3, 0.2, 50)
@@ -499,6 +503,8 @@ def add_literature_results(ax, xfield, yfield, posacki=False,
     # velocity dispersion relation
     if yfield == "imf" and xfield == "sigma":
         sigma = np.linspace(100, 300, 100)
+        idx = np.where((sigma > 250) & (sigma < 280))[0]
+        sigma[idx] = np.nan
         gamma = 2.4 + 5.4 * np.log10(sigma/200)
         ax.plot(sigma, gamma, "--", c="violet", 
                 label="La Barbera et al. (2013)")
