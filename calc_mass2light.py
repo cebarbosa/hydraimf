@@ -27,8 +27,9 @@ import context
 from run_paintbox import build_sed_model
 
 class Mass2Light:
-    def __init__(self, imf="bi"):
+    def __init__(self, imf="bi", band="r"):
         self.imf = imf
+        self.band = band
         self.tablefile = os.path.join(context.tables_dir,
                                       "sdss_{}_iTp0.00.MAG".format(imf))
         self.table = Table.read(self.tablefile, format="ascii.basic")
@@ -41,7 +42,7 @@ class Mass2Light:
             z = self.table["Z"].data
             t = self.table["Age"].data
             x = np.column_stack([z, t])
-        y = self.table["ML(r_SDSS)"].data
+        y = self.table["ML({}_SDSS)".format(band)].data
         self.f = LinearNDInterpolator(x, y, fill_value=0.)
 
     def __call__(self, p):
@@ -68,7 +69,8 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
     sed = build_sed_model(np.linspace(4500, 9000, 1000), sample="all")[0]
     params = np.array(sed.sspcolnames + ["sigma"])
     idx_trace = [sed.parnames.index(p) for p in params]
-    m2l = Mass2Light(imf="bi")
+    m2l_r = Mass2Light(imf="bi")
+    m2l_g = Mass2Light(imf="bi", band="g")
     m2l_ch = Mass2Light(imf="ch")
     parnames = sed.sspcolnames + ["sigma", "M2L", "alpha", "logSigma"]
     idx = np.arange(len(parnames))
@@ -87,14 +89,17 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
         trace = reader.get_chain(discard=800, flat=True, thin=100).T[
             idx_trace].T
         chsize = len(trace)
-        mls = m2l(trace[:,:3])
-        ml = np.percentile(mls, 50)
-        t["M2L"] = [ml]
-        t["M2L_lerr"] = [ml - np.percentile(mls, 16)]
-        t["M2L_uerr"] = [np.percentile(mls, 84) - ml]
+        mls_r = m2l_r(trace[:,:3])
+        mls_g = m2l_g(trace[:, :3])
+        ml_r = np.percentile(mls_r, 50)
+        ml_g = np.percentile(mls_g, 50)
+        print(ml_r, ml_g, ml_g - 0.59 * (ml_g - ml_r) - 0.01)
+        t["M2L"] = [ml_r]
+        t["M2L_lerr"] = [ml_r - np.percentile(mls_r, 16)]
+        t["M2L_uerr"] = [np.percentile(mls_r, 84) - ml_r]
         # Calculating alpha parameter
         m2l_mw = m2l_ch(trace[:,1:3])
-        alphas = mls / m2l_mw
+        alphas = mls_r / m2l_mw
         # print(np.median(mls), np.median(alphas), np.median(m2l_mw))
         # print(np.median(alphas))
         alpha = np.percentile(alphas, 50)
@@ -114,7 +119,7 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
                np.random.normal(D.to(u.pc).value, Derr.to(u.pc).value, chsize) /
                                    10)
         L = np.power(10, -0.4 * (Magr - Mg_sun))
-        Mstar = L * ml * u.M_sun
+        Mstar = L * ml_r * u.M_sun
         mustar = Mstar / pskpc / pskpc
         logmustar = np.log10(mustar.value)
         lm = np.percentile(logmustar, 50)
@@ -123,7 +128,7 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
         t["logSigma_lerr"] = [lm - np.percentile(logmustar, 16)] * mustar_unit
         t["logSigma_uerr"] = [np.percentile(logmustar, 84) - lm] * mustar_unit
         # Calculating correlations between parameters
-        trace = np.column_stack([trace, mls, alphas, logmustar]).T
+        trace = np.column_stack([trace, mls_r, alphas, logmustar]).T
         for k, (i, j) in enumerate(idxs):
             x = trace[i]
             y = trace[j]
