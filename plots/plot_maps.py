@@ -54,20 +54,31 @@ class PlotVoronoiMaps():
         self.coords = SkyCoord(context.ra0, context.dec0)
         self.D = context.D * u.Mpc
 
-    def plot(self, xylims=None, cbbox="regular", figsize=(2.8, 3),
-             arrows=True, sigma=None, xloc=None, sizes=None):
+    def plot(self, xylims=None, arrows=True, xloc=None, sizes=None,
+             hst=False):
         """ Make the plots. """
         sizes= ["onethird"] * len(self.columns) if sizes is None else sizes
-        figsize = {"onethird": (2.8, 3.1), "half": (3.54, 3.9)}
+        figsize = {"onethird": (2.8, 3.1), "half": (3.54, 3.9),
+                   "zoom" : (2.8, 2.7)}
         gsdict = {"onethird":
                   {"left":0.115, "right":0.995, "bottom":0.105, "top":0.995},
                   "half":
-                  {"left":0.1, "right":0.995, "bottom":0.09, "top":0.995}}
+                  {"left":0.1, "right":0.995, "bottom":0.09, "top":0.995},
+                  "zoom":
+                      {"left": 0.115, "right": 0.99, "bottom": 0.12,
+                       "top": 0.99}
+                  }
         xloc = len(self.columns) * [-4] if xloc is None else xloc
         if xylims is None:
             xylims = [(25, -10), (-25, 20)]
         for j, col in enumerate(tqdm(self.columns, desc="Producing maps")):
             size = sizes[j]
+            y0bar = {"onethird": 0.18, "half": 0.15, "zoom": 0.175}[size]
+            x0bar = {"onethird": 0.18, "half": 0.16, "zoom": 0.2}[size]
+            dyrec = {"onethird": 3.8, "half": 3.3, "zoom": 0.3}[size]
+            ytext = {"onethird": -8.4, "half": -8.8, "zoom": -0.6}[size]
+            xoff = {"onethird": 12.5, "half": 12.5, "zoom":0}[size]
+            xtext = xloc[j] + xoff
             fig = plt.figure(figsize=figsize[size])
             gs = gridspec.GridSpec(1,1)
             gs.update(**gsdict[size])
@@ -75,7 +86,10 @@ class PlotVoronoiMaps():
             ax = plt.subplot(gs[0])
             ax.set_facecolor("0.85")
             plt.minorticks_on()
-            self.make_contours(alpha=0.5)
+            if not hst:
+                self.make_contours(alpha=0.5)
+            if hst:
+                self.make_contours_hst()
             kmaps = []
             extents = []
             for i, (field, table) in enumerate(zip(self.fields, self.tables)):
@@ -103,7 +117,7 @@ class PlotVoronoiMaps():
             vmin = self.lims[j][0] if self.lims[j][0] is not None else automin
             vmax = self.lims[j][1] if self.lims[j][1] is not None else automax
             for i in range(len(self.fields)):
-                m = plt.imshow(kmaps[i], origin="bottom", cmap=self.cmaps[j],
+                m = plt.imshow(kmaps[i], origin="lower", cmap=self.cmaps[j],
                                vmin=vmin, vmax=vmax,
                                extent=extents[i],
                                aspect="equal", alpha=1)
@@ -122,25 +136,29 @@ class PlotVoronoiMaps():
                            labelsize=context.MEDIUM_SIZE)
             ####################################################################
             # Including colorbar
-            y0bar = 0.18 if size == "onethird" else 0.15
-            x0bar = 0.18 if size == "onethird" else 0.16
-            dyrec = 3.8 if size == "onethird" else 3.3
-            dxrec = 9.2 if size == "onethird" else 8.7
-            plt.gca().add_patch(Rectangle((2.25, -11.3), 9.2, dyrec, alpha=1,
-                                          zorder=10, edgecolor="w",
-                                          linewidth=1, facecolor="w"))
+            if size == "zoom":
+                plt.gca().add_patch(
+                    Rectangle((.8, -.8), -.8, dyrec, alpha=.8,
+                              zorder=10, edgecolor="w",
+                              linewidth=1, facecolor="w"))
+            if size in ["onethird", "half"]:
+                plt.gca().add_patch(Rectangle((2.25, -11.3), 9.2, dyrec, alpha=1,
+                                              zorder=10, edgecolor="w",
+                                              linewidth=1, facecolor="w"))
             self.draw_colorbar(fig, ax, m, orientation="horizontal",
                                cbar_pos=[x0bar, y0bar, 0.3, 0.05],
                                ticks=np.linspace(vmin, vmax, 4),
                                cblabel=self.labels[j],
                                cb_fmt=self.cb_fmts[j])
             ####################################################################
-            ytext = -8.4 if size == "onethird" else -8.8
-            ax.text(xloc[j]+12.5, ytext, self.labels[j], zorder=11)
+            ax.text(xtext, ytext, self.labels[j], zorder=11)
+            hst_str = "_hst" if hst is True else ""
             for fmt in ["pdf", "png"]:
                 output = os.path.join(self.outdir,
-                         "{}_sn{}.{}".format(col, self.targetSN, fmt))
+                         "{}_sn{}{}.{}".format(col, self.targetSN, hst_str,
+                                               fmt))
                 plt.savefig(output, dpi=350 )
+            plt.show()
             plt.clf()
             plt.close()
         return
@@ -169,6 +187,26 @@ class PlotVoronoiMaps():
             plt.clabel(cs, contours[0:-1:2], fmt="%d", fontsize=fontsize,
                        inline_spacing=-3,
                    manual=((-1.25, 1), (1.25, -4), (-6, 7)))
+        return
+
+    def make_contours_hst(self, lw=0.8, extent=None):
+
+        imgfile = os.path.join(context.home,
+                               "data/hst_06554_03_wfpc2_total_pc",
+                               "hst_06554_03_wfpc2_total_pc_drz.fits")
+        if extent is None:
+            extent = np.array(calc_extent(imgfile, self.coords,
+                                          self.D, extension=1))
+            extent[:2] += 0.24
+            extent[2:] -= 0.22
+        data = fits.getdata(imgfile)
+        data = ndimage.rotate(data, -1, reshape=False)
+        levels = []
+        for pc in [95, 96, 97, 98, 99, 99.3, 99.7]:
+            levels.append(np.percentile(data, pc))
+        colors = ["k", "k", "k", "k", "k", "k", "b"]
+        cs = plt.contour(data, levels, extent=extent,
+                         colors=colors, linewidths=lw)
         return
 
     def draw_colorbar(self, fig, ax, coll, ticks=None, cblabel="",
@@ -228,7 +266,7 @@ def make_table(targetSN=250, dataset="MUSE", update=False):
         results = Table.read(results_table)
     return results
 
-def make_maps(results, targetSN=250, dataset="MUSE"):
+def make_maps(results, targetSN=250, dataset="MUSE", zoom=False):
     wdir = os.path.join(context.data_dir, dataset, "voronoi",
                         "sn{}".format(targetSN))
     outdir = os.path.join(wdir, "plots")
@@ -256,11 +294,18 @@ def make_maps(results, targetSN=250, dataset="MUSE"):
                           targetSN=targetSN, #lims=lims,
                           labels=labels[idx:], cb_fmts=cb_fmts[idx:],
                           cmaps=cmaps[idx:])
-
     xylims = [[12, -9.5], [-12, 12]]
+    hst = False
+    if zoom:
+        r = .82
+        xylims = [[r, -r], [-r, r]]
+        sizes = len(sizes) * ["zoom"]
+        hst = True
+        xloc = [0.56, 0.47, 0.55, 0.40, 0.50, 0.50, 0.40, 0.55, 0.62, 0.57,
+                0.71]
     pvm.plot(xylims=xylims, arrows=False, xloc=xloc[idx:],
-             sizes=sizes[idx:])
+             sizes=sizes[idx:], hst=hst)
 
 if __name__ == "__main__":
     results = make_table(update=True)
-    make_maps(results)
+    make_maps(results, zoom=True)
