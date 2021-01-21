@@ -69,7 +69,7 @@ def plot_radial_profiles(table, ypars, xpar="R", xlim=(0.07, 20), xscale="log"):
         ax.text((n+1) * fwhm / 2 + hw[n], 0.77, "{:.2f}''".format((n+1) *
                                                                   1.08 / 2),
                 fontsize=6)
-    plt.legend(handles=legend_elements, ncol=4, frameon=True, loc=1,
+    plt.legend(handles=legend_elements, ncol=4, frameon=True, loc=(0.4, 0.8),
                prop={"size": 5})
     ax.set_ylabel("light fraction", labelpad=-1)
     ax.set_xlabel(labels["R"])
@@ -93,15 +93,14 @@ def plot_radial_profiles(table, ypars, xpar="R", xlim=(0.07, 20), xscale="log"):
         ax.set_xlim(xlim)
         ax.xaxis.set_ticklabels([])
         if p in b16_fields:
-            label = "Barbosa et al. (2016)" if i==0 else None
-
+            label = "B16" if i==0 else None
             ax.errorbar(b16["Rad"], b16[b16_fields[p]],
                         yerr=b16["e_{}".format(b16_fields[p]).replace("___",
                                                                       "__")],
                         fmt="x", mew=0.5, label=label,
                         elinewidth=0.5, ms=4.5, c="k")
         if i == 0:
-            plt.legend(frameon=True, prop={"size": 6})
+            plt.legend(frameon=True, prop={"size": 6}, loc=3)
         ax.text(0.05, 0.8,
                 "({})".format(string.ascii_lowercase[i]),
                 transform=ax.transAxes, fontsize=10)
