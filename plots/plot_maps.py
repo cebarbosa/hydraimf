@@ -59,23 +59,23 @@ class PlotVoronoiMaps():
         """ Make the plots. """
         sizes= ["onethird"] * len(self.columns) if sizes is None else sizes
         figsize = {"onethird": (2.8, 3.1), "half": (3.54, 3.9),
-                   "zoom" : (2.8, 2.7)}
+                   "zoom" : (3.54, 3.43)}
         gsdict = {"onethird":
                   {"left":0.115, "right":0.995, "bottom":0.105, "top":0.995},
                   "half":
                   {"left":0.1, "right":0.995, "bottom":0.09, "top":0.995},
                   "zoom":
-                      {"left": 0.115, "right": 0.99, "bottom": 0.12,
-                       "top": 0.99}
+                      {"left": 0.11, "right": 0.97, "bottom": 0.095,
+                       "top": 0.995}
                   }
         xloc = len(self.columns) * [-4] if xloc is None else xloc
         if xylims is None:
             xylims = [(25, -10), (-25, 20)]
         for j, col in enumerate(tqdm(self.columns, desc="Producing maps")):
             size = sizes[j]
-            y0bar = {"onethird": 0.18, "half": 0.15, "zoom": 0.175}[size]
-            x0bar = {"onethird": 0.18, "half": 0.16, "zoom": 0.2}[size]
-            dyrec = {"onethird": 3.8, "half": 3.3, "zoom": 0.3}[size]
+            y0bar = {"onethird": 0.18, "half": 0.15, "zoom": 0.15}[size]
+            x0bar = {"onethird": 0.18, "half": 0.16, "zoom": 0.15}[size]
+            dyrec = {"onethird": 3.8, "half": 3.3, "zoom": 0.27}[size]
             ytext = {"onethird": -8.4, "half": -8.8, "zoom": -0.6}[size]
             xoff = {"onethird": 12.5, "half": 12.5, "zoom":0}[size]
             xtext = xloc[j] + xoff
@@ -138,7 +138,7 @@ class PlotVoronoiMaps():
             # Including colorbar
             if size == "zoom":
                 plt.gca().add_patch(
-                    Rectangle((.8, -.8), -.8, dyrec, alpha=.8,
+                    Rectangle((.8, -.8), -.7, dyrec, alpha=.9,
                               zorder=10, edgecolor="w",
                               linewidth=1, facecolor="w"))
             if size in ["onethird", "half"]:
@@ -301,8 +301,8 @@ def make_maps(results, targetSN=250, dataset="MUSE", zoom=False):
         xylims = [[r, -r], [-r, r]]
         sizes = len(sizes) * ["zoom"]
         hst = True
-        xloc = [0.56, 0.47, 0.55, 0.40, 0.50, 0.50, 0.40, 0.55, 0.62, 0.57,
-                0.71]
+        xloc = [0.57, 0.52, 0.57, 0.45, 0.52, 0.52, 0.50, 0.57, 0.62, 0.58,
+                0.69]
     pvm.plot(xylims=xylims, arrows=False, xloc=xloc[idx:],
              sizes=sizes[idx:], hst=hst)
 
