@@ -23,7 +23,7 @@ if __name__ == "__main__":
     new_poly = False
     data_dir = os.path.join(context.data_dir, "MUSE/voronoi/sn250")
     wdir = os.path.join(data_dir, "sci")
-    outfile = os.path.join(data_dir, "plots/NaD.pdf")
+    outfile = os.path.join(data_dir, "plots/NaD")
     table = Table.read(os.path.join(data_dir, "results.fits"))
     # Read first spectrum to set the dispersion
     specnames = sorted([_ for _ in sorted(os.listdir(wdir)) if _.endswith(
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     pname = "NaFe"
     pstr = "[Na/Fe]"
     idxpar = sed.parnames.index(pname)
-    parvals = np.linspace(0, 0.4, 20)
+    parvals = np.linspace(sed.ssppars[pname][0], sed.ssppars[pname][1], 20)
     mask = np.array([i for i in range(len(wave)) if i not in goodpixels])
     print("Done!")
     cmap = cm.get_cmap('Spectral')
@@ -141,14 +141,15 @@ if __name__ == "__main__":
 
             ylim = ax.get_ylim()
             ax.set_ylim(None, ylim[1] + 0.18 * (ylim[1] - ylim[0]))
-            for band in bands:
-                ax.axvspan(band[2], band[3], color="lightcyan", zorder=-1000)
+            # for band in bands:
+            #     ax.axvspan(band[2], band[3], color="lightcyan", zorder=-1000)
             for skyline in skylines:
                 ax.axvspan(skyline - 3, skyline + 3, color="0.9")
         if i == 3:
             ax.set_xlabel("$\lambda$ (\\r{A})")
     cax = fig.add_axes([0.14, ftop+0.03, 0.80, 0.035])
-    normalize = mpl.colors.Normalize(vmin=0, vmax=0.4)
+    normalize = mpl.colors.Normalize(vmin=sed.ssppars[pname][0],
+                                     vmax=sed.ssppars[pname][1])
     cb1 = mpl.colorbar.ColorbarBase(cax, norm=normalize,
                                     cmap=mpl.cm.get_cmap("Spectral"),
                                     orientation="horizontal")
@@ -161,5 +162,6 @@ if __name__ == "__main__":
     #                 right=False)
     # plt.xlabel("$\lambda$ (\\r{A})")
     # plt.ylabel("$f_\lambda$")
-    plt.savefig(outfile, dpi=250)
+    for ftype in ["png", "pdf"]:
+        plt.savefig("{}.{}".format(outfile, ftype), dpi=250)
     plt.show()
