@@ -297,7 +297,7 @@ def run_mcmc(model, db, redo=False, method=None):
 #     sampler.run_mcmc(pos, 1000, progress=True)
 #     return
 
-def run_sampler(loglike, priors, outdb, nsteps=3000):
+def run_sampler(loglike, priors, outdb, nsteps=1000):
     ndim = len(loglike.parnames)
     nwalkers = 2 * ndim
     pos = np.zeros((nwalkers, ndim))
