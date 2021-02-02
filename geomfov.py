@@ -56,10 +56,9 @@ def calc_geom(binfile, imgfile, coords, D):
     y = np.linspace(extent[2], extent[3], ydim)
     xx, yy = np.meshgrid(x, y)
     binimg = np.ma.array(binimg, mask=~np.isfinite(binimg))
-    bins = np.arange(binimg.min(), binimg.max()+1)
-    xcen = np.zeros_like(bins)
+    bins = np.unique(binimg[np.isfinite(binimg)]).astype(int)
+    xcen = np.zeros(len(bins))
     ycen = np.zeros_like(xcen)
-    bins = bins.astype(int)
     for i, bin in enumerate(bins):
         idx = np.where(binimg == bin)
         xcen[i] = np.mean(xx[idx])
@@ -73,8 +72,9 @@ def calc_geom(binfile, imgfile, coords, D):
 
 def get_geom(field, targetSN, dataset="MUSE"):
     """ Obtain table with geometric parameters given only field and bin S/N"""
-    binfile = os.path.join(context.get_data_dir(dataset), field,
-                           "sn{0}/voronoi2d_sn{0}.fits".format(targetSN))
+    binfile = os.path.join(context.data_dir, dataset, "voronoi",
+                           "sn{0}/voronoi2d_{1}_sn{0}.fits".format(targetSN,
+                                                                field))
     imgname, cubename = context.get_field_files(field)
     coords = SkyCoord(context.ra0, context.dec0)
     table = calc_geom(binfile, imgname, coords, context.D * u.Mpc)
