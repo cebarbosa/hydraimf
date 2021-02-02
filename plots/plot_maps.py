@@ -93,9 +93,10 @@ class PlotVoronoiMaps():
             kmaps = []
             extents = []
             for i, (field, table) in enumerate(zip(self.fields, self.tables)):
-                binsfile = os.path.join(context.get_data_dir(self.dataset),
-                        field, "sn{0}/voronoi2d_sn{0}.fits".format(
-                        self.targetSN))
+                wdir = os.path.join(context.data_dir, self.dataset, "voronoi",
+                                    "sn{}".format(self.targetSN))
+                binsfile = os.path.join(wdir,
+                        "voronoi2d_{}_sn{}.fits".format(field, self.targetSN))
                 bins = np.array([float(_.split("_")[1]) for _ in table["BIN"]])
                 vector = table[col].astype(np.float)
                 image = context.get_field_files(field)[0]
@@ -158,7 +159,7 @@ class PlotVoronoiMaps():
                          "{}_sn{}{}.{}".format(col, self.targetSN, hst_str,
                                                fmt))
                 plt.savefig(output, dpi=350 )
-            plt.show()
+            # plt.show()
             plt.clf()
             plt.close()
         return
@@ -202,11 +203,16 @@ class PlotVoronoiMaps():
         data = fits.getdata(imgfile)
         data = ndimage.rotate(data, -1, reshape=False)
         levels = []
-        for pc in [95, 96, 97, 98, 99, 99.3, 99.7]:
+        for pc in [95, 96, 97, 98, 99, 99.3, 99.6, 99.65, 99.7]:
             levels.append(np.percentile(data, pc))
-        colors = ["k", "k", "k", "k", "k", "k", "b"]
-        cs = plt.contour(data, levels, extent=extent,
-                         colors=colors, linewidths=lw)
+        colors = ["k", "k", "k", "k", "k", "k", "b", "b", "b"]
+        cs = plt.contour(data, levels[:-3], extent=extent,
+                         colors=colors[:-3], linewidths=lw)
+        data[:470,:] = 0
+        data[:,540:] = 0
+        cs2 = plt.contour(data, levels[-3:], extent=extent,
+                         colors=colors[-3:], linewidths=lw)
+
         return
 
     def draw_colorbar(self, fig, ax, coll, ticks=None, cblabel="",
@@ -308,4 +314,4 @@ def make_maps(results, targetSN=250, dataset="MUSE", zoom=False):
 
 if __name__ == "__main__":
     results = make_table(update=True)
-    make_maps(results, zoom=True)
+    make_maps(results)
