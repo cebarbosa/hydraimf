@@ -82,6 +82,7 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
     angs = np.zeros_like(rs)
     pvals = np.zeros_like(rs)
     s = chi2.ppf(0.68, df=2)
+    sbp = []
     for n, db in enumerate(tqdm(dbs, desc="Calculating M/L ratio")):
         t = Table()
         t["BIN"] = ["_".join(db.replace(".h5", "").split("_")[::2])]
@@ -115,6 +116,8 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
         flams = np.random.normal(flam, flamerr,
                                  (chsize, len(flamerr))) * data["flam"].unit
         magr = sdss_r.get_ab_magnitudes(flams, wave)["sdss2010-r"].data
+        mu_r = magr + 2.5 * np.log10(0.2**2)
+        sbp.append(np.median(mu_r))
         Magr = magr - 5 * np.log10(
                np.random.normal(D.to(u.pc).value, Derr.to(u.pc).value, chsize) /
                                    10)
@@ -147,6 +150,7 @@ def calc_mass2light(targetSN=250, dataset="MUSE", redo=False):
             angs[k, n] = ang
             pvals[k, n] = p
     table = vstack(ts)
+    table["mu_r"] = sbp
     table.write(outtable, overwrite=True)
     # Saving correlations
     r = np.median(rs, axis=1)
