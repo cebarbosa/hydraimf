@@ -205,7 +205,19 @@ def sort_voronoi2D(voronoi2D, geom):
     hdu.writeto(voronoi2D, overwrite=True)
     return voronoi2D
 
-def combine_spectra(cubename, voronoi2D, targetSN, objname=None, redo=False):
+def split_bin0003(voronoi2D):
+    newvor = fits.getdata(voronoi2D)
+    ydim, xdim = newvor.shape
+    x, y = np.meshgrid(np.arange(xdim), np.arange(ydim))
+    blue_spot = np.where((x > 202) & (y > 235) & (x < 209)  & (y < 241))
+    vblob = 76
+    newvor[blue_spot] = vblob
+    hdu = fits.PrimaryHDU(newvor)
+    hdu.writeto(voronoi2D, overwrite=True)
+    return voronoi2D
+
+def combine_spectra(cubename, voronoi2D, targetSN, objname=None, redo=False,
+                    outdir=None):
     """ Produces the combined spectra for a given binning file.
 
     Input Parameters
@@ -227,7 +239,8 @@ def combine_spectra(cubename, voronoi2D, targetSN, objname=None, redo=False):
 
     """
     objname = "spec" if objname is None else objname
-    outdir = os.path.join(os.getcwd(), "sn{}/spec1d".format(targetSN))
+    outdir = os.path.join(os.getcwd(), "spec1d".format(targetSN)) if outdir \
+             is None else outdir
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     data = fits.getdata(cubename, 1)
@@ -235,13 +248,14 @@ def combine_spectra(cubename, voronoi2D, targetSN, objname=None, redo=False):
     wave = array_from_header(cubename)
     vordata = fits.getdata(voronoi2D)
     vordata = np.ma.array(vordata, mask=np.isnan(vordata))
-    bins = np.unique(vordata)[:-1]
+    bins = np.unique(vordata[np.isfinite(vordata)])
     for j, bin in enumerate(bins):
         idx, idy = np.where(vordata == bin)
         ncombine = len(idx)
         print("Bin {0} / {1} (ncombine={2})".format(j + 1, bins.size, ncombine))
         output = os.path.join(outdir, "{}_sn{}_{:04d}.fits".format(objname,
                                                                    targetSN, int(bin)))
+        print(output)
         if os.path.exists(output) and not redo:
             continue
         errs = np.sqrt(np.nanmean(variance[:,idx,idy], axis=1))
@@ -251,7 +265,7 @@ def combine_spectra(cubename, voronoi2D, targetSN, objname=None, redo=False):
     return
 
 def run_ngc3311():
-    fields = ["fieldB"]
+    fields = ["fieldA"]
     dataset = "MUSE"
     targetSN = 250
     vordir = os.path.join(context.data_dir, dataset, "voronoi")
@@ -260,12 +274,11 @@ def run_ngc3311():
     for field in fields:
         imgname, cubename = context.get_field_files(field, dataset=dataset)
         wdir = os.path.split(imgname)[0]
-        os.chdir(wdir)
         snimg = os.path.join(wdir, "signal_noise.fits")
         collapse_cube(cubename, snimg, redo=False)
         signal = fits.getdata(snimg, 1)
         noise = fits.getdata(snimg, 2)
-        mask = fits.getdata("simple_binning.fits")
+        mask = fits.getdata(os.path.join(wdir, "simple_binning.fits"))
         outdir = os.path.join(vordir, "sn{}".format(targetSN))
         if not os.path.exists(outdir):
             os.mkdir(outdir)
@@ -275,16 +288,20 @@ def run_ngc3311():
                                 output=bintablename)
         vorimg = os.path.join(outdir, "voronoi2d_{}_sn{}.fits".format(
                               field, targetSN))
-        voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=False,
+        voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=True,
                                        output=vorimg)
+        geom = calc_geom(voronoi2D, imgname, context.coords,
+                         context.D * u.Mpc)
+        voronoi2D = sort_voronoi2D(voronoi2D, geom)
+        if field == "fieldA":
+            voronoi2D = split_bin0003(voronoi2D)
+        geom = calc_geom(voronoi2D, imgname, context.coords,
+                         context.D * u.Mpc)
         geomtable = os.path.join(outdir, "geom_{}.fits".format(field))
-        if not os.path.exists(geomtable):
-            geom = calc_geom(voronoi2D, imgname, context.coords,
-                             context.D * u.Mpc)
-            geom.write(os.path.join(outdir, "geom_{}.fits".format(field)),
-                       overwrite=True)
-            voronoi2D = sort_voronoi2D(voronoi2D, geom)
-        combine_spectra(cubename, voronoi2D, targetSN, field, redo=False)
+        geom.write(geomtable, overwrite=True)
+        outdir = os.path.join(outdir, "spec1d")
+        combine_spectra(cubename, voronoi2D, targetSN, field, redo=False,
+                        outdir=outdir)
 
 def run_m87():
     targetSN = 500
@@ -302,7 +319,7 @@ def run_m87():
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     bintable = calc_binning(signal, noise, mask, targetSN, redo=False)
-    voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=False)
+    voronoi2D = make_voronoi_image(bintable, imgname, targetSN, redo=True)
     geom = calc_geom(voronoi2D, imgname, coords, D)
     geom.write(os.path.join(outdir, "geom_{}.fits".format(field)))
     voronoi2D = sort_voronoi2D(voronoi2D, geom)
