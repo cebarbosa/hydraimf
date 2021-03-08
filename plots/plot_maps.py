@@ -239,6 +239,17 @@ def make_table(targetSN=250, dataset="MUSE", update=False):
     wdir = os.path.join(context.data_dir, dataset, "voronoi",
                         "sn{}".format(targetSN))
     results_table = os.path.join(wdir, "results.fits")
+    paper_table = os.path.join(wdir, "table3.fits")
+    papercols = ['BIN', 'X', 'Y', 'R', 'PA', 'SNR',
+                  'imf', 'imf_lerr', 'imf_uerr', 'Z', 'Z_lerr',
+                 'Z_uerr', 'T', 'T_lerr', 'T_uerr', 'alphaFe',
+                 'alphaFe_lerr', 'alphaFe_uerr', 'NaFe', 'NaFe_lerr',
+                 'NaFe_uerr', 'Av', 'Av_lerr', 'Av_uerr', 'Rv', 'Rv_lerr',
+                 'Rv_uerr', 'V', 'V_lerr', 'V_uerr', 'sigma', 'sigma_lerr',
+                 'sigma_uerr', 'M2L',
+                 'M2L_lerr', 'M2L_uerr', 'alpha', 'alpha_lerr',
+                 'alpha_uerr', 'logSigma',
+                 'logSigma_lerr', 'logSigma_uerr',]
     if not os.path.exists(results_table) or update:
         geomA = get_geom("fieldA", targetSN)
         geomB = get_geom("fieldB", targetSN)
@@ -268,6 +279,13 @@ def make_table(targetSN=250, dataset="MUSE", update=False):
         stpop = vstack(stpop)
         results = join(results, stpop, keys="BIN")
         results.write(results_table, overwrite=True)
+        # Table for the paper
+        papertable = results[papercols]
+        papertable.rename_column("BIN", "ID")
+        papertable.rename_column("imf", "Gammab")
+        papertable.rename_column("imf_lerr", "Gammab_lerr")
+        papertable.rename_column("imf_uerr", "Gammab_uerr")
+        papertable.write(paper_table, overwrite=True)
     else:
         results = Table.read(results_table)
     return results
@@ -280,7 +298,7 @@ def make_maps(results, targetSN=250, dataset="MUSE", zoom=False):
         os.mkdir(outdir)
     fields = ["SNR", "Z", "T", "imf", "alphaFe", "NaFe", "Av", "sigma",
               "M2L", "alpha", "logSigma"]
-    labels = ["SNR (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
+    labels = ["S/N (\\r{A}$^{-1}$)", "[Z/H]", "Age (Gyr)",
               "$\\Gamma_b$", r"[$\alpha$/Fe]", "[Na/Fe]", "$A_V$",
               "$\sigma_*$ (km/s)", "$\\Upsilon_*^r$ ($M_\odot / L_\odot$)",
               "$\\Upsilon_*^r / \\Upsilon_{*,{\\rm MW}}^{r}$",
